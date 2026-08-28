@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>IEM · Consolidado de carga</title>
+  <link rel="icon" href="favicon-32.png" sizes="32x32" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    :root { --c-bg:#0f172a; --c-card:#1e293b; --c-border:#334155; --c-text:#f1f5f9; --c-muted:#94a3b8; --c-pri:#3B6EA5; --c-ok:#16a34a; --c-warn:#f59e0b; --c-bad:#dc2626; }
+    body.cons-page { margin:0; background:var(--c-bg); color:var(--c-text); font-family:system-ui,-apple-system,sans-serif; min-height:100vh; }
+    body.cons-page.light-theme { --c-bg:#f8fafc; --c-card:#fff; --c-border:#e2e8f0; --c-text:#0f172a; --c-muted:#64748b; }
+    .cons-wrap { max-width:1100px; margin:0 auto; padding:1rem 1rem 4rem; }
+    .cons-head { display:flex; flex-wrap:wrap; gap:.75rem; align-items:center; justify-content:space-between; margin-bottom:1rem; }
+    .cons-head h1 { margin:0; font-size:1.25rem; }
+    .cons-card { background:var(--c-card); border:1px solid var(--c-border); border-radius:14px; padding:1rem; margin-bottom:1rem; }
+    .cons-grid { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
+    @media(max-width:720px){ .cons-grid{ grid-template-columns:1fr; } }
+    .cons-card label { display:block; font-size:.75rem; color:var(--c-muted); margin-bottom:.25rem; }
+    .cons-card input, .cons-card select { width:100%; padding:.55rem .65rem; border-radius:10px; border:1px solid var(--c-border); background:var(--c-bg); color:var(--c-text); font:inherit; box-sizing:border-box; }
+    .cons-actions { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.75rem; }
+    .cons-actions .btn { cursor:pointer; }
+    .cons-tabs { display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:.75rem; }
+    .cons-tab { padding:.45rem .85rem; border-radius:999px; border:1px solid var(--c-border); background:transparent; color:var(--c-text); cursor:pointer; font:inherit; font-size:.85rem; }
+    .cons-tab.active { background:var(--c-pri); border-color:var(--c-pri); color:#fff; }
+    .cons-table-wrap { overflow:auto; max-height:55vh; border:1px solid var(--c-border); border-radius:12px; }
+    .cons-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+    .cons-table th, .cons-table td { padding:.45rem .55rem; border-bottom:1px solid var(--c-border); text-align:left; white-space:nowrap; }
+    .cons-table th { position:sticky; top:0; background:var(--c-card); z-index:1; }
+    .cons-table tr:hover td { background:rgba(59,110,165,.08); }
+    .badge-frio { color:#38bdf8; font-weight:700; }
+    .badge-seco { color:#fbbf24; font-weight:700; }
+    .cons-status { font-size:.85rem; color:var(--c-muted); margin:.35rem 0; }
+    .cons-search-results { max-height:180px; overflow:auto; border:1px solid var(--c-border); border-radius:10px; margin-top:.35rem; display:none; }
+    .cons-search-results.open { display:block; }
+    .cons-search-item { padding:.5rem .65rem; cursor:pointer; border-bottom:1px solid var(--c-border); }
+    .cons-search-item:hover { background:rgba(59,110,165,.15); }
+    .cons-del { background:transparent; border:none; color:var(--c-bad); cursor:pointer; font-size:1rem; }
+    .cons-sec-title { font-size:.95rem; font-weight:700; margin:1rem 0 .4rem; padding:.35rem .5rem; border-radius:8px; background:rgba(59,110,165,.12); }
+  </style>
+</head>
+<body class="cons-page">
+  <div class="cons-wrap">
+    <div class="cons-head">
+      <div>
+        <h1>📦 Consolidado de carga</h1>
+        <div class="cons-status" id="consStatus">Cargando catálogo…</div>
+      </div>
+      <div class="cons-actions">
+        <a class="btn btn-outline btn-sm" href="index.html">← Inventario</a>
+        <button type="button" class="btn btn-outline btn-sm" id="btnConsTema">Tema</button>
+      </div>
+    </div>
+
+    <div class="cons-card">
+      <h3 style="margin:0 0 .65rem;font-size:1rem;">📥 Importar como el macro (Excel consolidado de carga)</h3>
+      <p class="cons-status" style="margin-top:0">Sube el Excel diario (columnas <code>EntidadNombre</code>, <code>ConsolidadoComprobanteProductoCodigo</code>, <code>Cantidad</code>…) o elige una <strong>carpeta</strong> y se generan todos los consolidados.</p>
+      <div class="cons-actions" style="margin-top:.35rem">
+        <label class="btn btn-primary btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:.35rem">
+          📄 Excel / varios archivos
+          <input type="file" id="consFile" accept=".xlsx,.xls,.xlsm,.csv" multiple hidden />
+        </label>
+        <label class="btn btn-outline btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:.35rem">
+          📁 Carpeta completa
+          <input type="file" id="consFolder" webkitdirectory directory multiple hidden />
+        </label>
+      </div>
+      <p class="cons-status" id="consImportStatus">Sin archivo importado.</p>
+      <hr style="border:none;border-top:1px solid var(--c-border);margin:1rem 0" />
+      <h3 style="margin:0 0 .65rem;font-size:.95rem;color:var(--c-muted)">O agregar línea a mano</h3>
+      <div class="cons-grid">
+        <div>
+          <label>Fecha de carga</label>
+          <input type="date" id="consFecha" />
+        </div>
+        <div>
+          <label>Camión / ruta</label>
+          <input type="text" id="consCamion" list="consCamionList" placeholder="Ej. CAMION 102" autocomplete="off" />
+          <datalist id="consCamionList">
+            <option value="CAMION 102"></option>
+            <option value="CAMION 103"></option>
+            <option value="CAMION 104"></option>
+            <option value="CAMION 105"></option>
+          </datalist>
+        </div>
+        <div style="grid-column:1/-1">
+          <label>Buscar producto (código o nombre)</label>
+          <input type="search" id="consBuscar" placeholder="Código Uniflex o descripción…" autocomplete="off" />
+          <div class="cons-search-results" id="consResultados"></div>
+        </div>
+        <div>
+          <label>Producto elegido</label>
+          <input type="text" id="consProdLabel" readonly placeholder="Ninguno" />
+          <input type="hidden" id="consProdCodigo" />
+        </div>
+        <div>
+          <label>Cantidad (unidades)</label>
+          <input type="number" id="consCant" min="1" step="1" value="1" />
+        </div>
+      </div>
+      <div class="cons-actions">
+        <button type="button" class="btn btn-primary btn-sm" id="btnConsAgregar">＋ Agregar al consolidado</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btnConsLimpiar">Vaciar lista</button>
+      </div>
+    </div>
+
+    <div class="cons-tabs" role="tablist">
+      <button type="button" class="cons-tab active" data-cons-vista="detalle">Detalle por camión</button>
+      <button type="button" class="cons-tab" data-cons-vista="consolidado">Consolidado (Fríos / Secos)</button>
+    </div>
+
+    <div class="cons-card">
+      <div class="cons-actions" style="margin-top:0;margin-bottom:.65rem">
+        <button type="button" class="btn btn-primary btn-sm" id="btnConsExcelTodos" title="Una hoja por camión (Fríos/Secos) + consolidado">📥 Excel todos los camiones</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btnConsExcelUno" title="Solo un camión">📥 Excel un camión</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btnConsExcel" title="Solo consolidado Fríos/Secos">📥 Excel consolidado</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btnConsPrintMulti" title="Imprime todos los camiones (una página cada uno)">🖨 Imprimir todos</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btnConsPrintUno" title="Imprime un solo camión">🖨 Imprimir uno</button>
+        <button type="button" class="btn btn-danger btn-sm" id="btnConsDescontar" title="Resta del stock teórico en Supabase">⬇ Descontar del inventario</button>
+      </div>
+      <p class="cons-status" id="consResumen">0 líneas</p>
+      <div class="cons-table-wrap">
+        <table class="cons-table" id="consTabla">
+          <thead id="consThead"></thead>
+          <tbody id="consTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="config.js"></script>
+  <script src="consolidado.js"></script>
+</body>
+</html>
