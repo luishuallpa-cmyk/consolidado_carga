@@ -181,6 +181,10 @@
       ])).replace(',', '.')) || 0;
       if (!(cant > 0)) return;
       if (!camion) camion = 'SIN CAMION';
+      var peso = parseFloat(String(valRow(row, [
+        'ConsolidadoComprobantePeso', 'Peso', 'Peso/Obs', 'PesoObs'
+      ])).replace(',', '.'));
+      if (!isFinite(peso)) peso = 0;
 
       var cat = catalogo.find(function (p) { return p.codigo === codigo; });
       var tipo = cat ? cat.tipo : clasificarProducto({ descripcion: desc });
@@ -199,6 +203,7 @@
         unidad_ref: uref || und || '',
         factor: factor,
         cantidad: cant,
+        peso: peso,
         codigo_fabrica: fab,
         _archivo: row.__archivo || ''
       });
@@ -404,6 +409,7 @@
         unidad_ref: productoSel.unidad_ref,
         factor: productoSel.factor,
         cantidad: cant,
+        peso: 0,
         codigo_fabrica: productoSel.codigo_fabrica
       });
     }
@@ -595,7 +601,7 @@
             cu.cajas === '' ? '' : cu.cajas,
             cu.sueltas,
             it.tipo || '',
-            ''
+            fmtPeso(it.peso)
           ]);
         });
       });
@@ -616,51 +622,79 @@
   }
 
 
-  function buildPrintHtml(titulo, camion, items, fecha) {
+  var LOGO_URL = 'logo-iem.png';
+
+  function fmtPeso(p) {
+    var n = Number(p);
+    if (!isFinite(n) || n === 0) return '';
+    return (Math.round(n * 100) / 100).toFixed(2);
+  }
+
+  function buildPrintHtml(titulo, camion, items, fecha, opts) {
+    opts = opts || {};
+    var numHoja = opts.numHoja != null ? opts.numHoja : '';
+    var totalHojas = opts.totalHojas != null ? opts.totalHojas : '';
     var frios = items.filter(function (it) { return String(it.tipo || '').toUpperCase().indexOf('FRIO') >= 0; });
     var secos = items.filter(function (it) { return String(it.tipo || '').toUpperCase().indexOf('FRIO') < 0; });
-    function tablaBloque(nombre, lista) {
+
+    function tablaBloque(nombre, colorBg, lista) {
       if (!lista.length) return '';
       var grupos = Object.create(null);
       var orden = [];
       lista.forEach(function (it) {
-        var cat = it._categoria || lineaCategoria(it.descripcion);
+        var cat = it._categoria || lineaCategoria(it.descripcion, it.linea);
         if (!grupos[cat]) { grupos[cat] = []; orden.push(cat); }
         grupos[cat].push(it);
       });
       orden.sort();
-      var h = '<h2 style="margin:12px 0 6px;font-size:13pt;">' + esc(nombre) + '</h2>';
+      var h = '<div class="blk-tipo" style="margin:14px 0 6px;padding:8px 12px;border-radius:8px;background:' + colorBg + ';color:#fff;font-weight:800;font-size:12pt;letter-spacing:.04em;">' + esc(nombre) + '</div>';
       var n = 0;
       orden.forEach(function (cat) {
-        h += '<div style="font-weight:700;margin:8px 0 4px;font-size:10pt;background:#e2e8f0;padding:3px 6px;">' + esc(cat) + '</div>';
-        h += '<table style="width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:6px;"><thead><tr>' +
-          '<th style="border:1px solid #333;padding:3px;">ITEM</th>' +
-          '<th style="border:1px solid #333;padding:3px;">Código</th>' +
-          '<th style="border:1px solid #333;padding:3px;">Producto / Descripción</th>' +
-          '<th style="border:1px solid #333;padding:3px;">Unidad</th>' +
-          '<th style="border:1px solid #333;padding:3px;">Cajas</th>' +
-          '<th style="border:1px solid #333;padding:3px;">Und. sueltas</th></tr></thead><tbody>';
+        h += '<div style="font-weight:700;margin:10px 0 4px;font-size:10pt;background:#1e3a5f;color:#fff;padding:5px 10px;border-radius:6px;">' + esc(cat) + '</div>';
+        h += '<table style="width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:8px;"><thead><tr style="background:#e2e8f0;">' +
+          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:40px;">ITEM</th>' +
+          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Código</th>' +
+          '<th style="border:1px solid #94a3b8;padding:5px 4px;">Producto / Descripción</th>' +
+          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:60px;">Unidad</th>' +
+          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:48px;">Cajas</th>' +
+          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Und. sueltas</th>' +
+          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Peso</th></tr></thead><tbody>';
         grupos[cat].forEach(function (it) {
           n++;
           var fac = Number(it.factor) > 1 ? Number(it.factor) : 1;
           var cu = cantACajasUnd(it.cantidad, fac);
-          h += '<tr><td style="border:1px solid #333;padding:3px;text-align:center;">' + n +
-            '</td><td style="border:1px solid #333;padding:3px;">' + esc(it.codigo) +
-            '</td><td style="border:1px solid #333;padding:3px;">' + esc(it.descripcion) +
-            '</td><td style="border:1px solid #333;padding:3px;">' + esc(it.unidad_ref || '') +
-            '</td><td style="border:1px solid #333;padding:3px;text-align:center;">' + (cu.cajas === '' ? '' : cu.cajas) +
-            '</td><td style="border:1px solid #333;padding:3px;text-align:center;">' + cu.sueltas + '</td></tr>';
+          var pesoTxt = fmtPeso(it.peso);
+          h += '<tr><td style="border:1px solid #cbd5e1;padding:4px;text-align:center;">' + n +
+            '</td><td style="border:1px solid #cbd5e1;padding:4px;font-family:monospace;font-weight:600;">' + esc(it.codigo) +
+            '</td><td style="border:1px solid #cbd5e1;padding:4px;">' + esc(it.descripcion) +
+            '</td><td style="border:1px solid #cbd5e1;padding:4px;">' + esc(it.unidad_ref || '') +
+            '</td><td style="border:1px solid #cbd5e1;padding:4px;text-align:center;">' + (cu.cajas === '' ? '' : cu.cajas) +
+            '</td><td style="border:1px solid #cbd5e1;padding:4px;text-align:center;">' + cu.sueltas +
+            '</td><td style="border:1px solid #cbd5e1;padding:4px;text-align:right;">' + pesoTxt + '</td></tr>';
         });
         h += '</tbody></table>';
       });
       return h;
     }
-    return '<div class="print-page" style="page-break-after:always;font-family:Arial,sans-serif;color:#000;">' +
-      '<h1 style="text-align:center;font-size:14pt;margin:0 0 8px;">' + esc(titulo) + '</h1>' +
-      '<div style="margin-bottom:6px;"><strong>Fecha:</strong> ' + esc(fecha || '') +
-      ' &nbsp; <strong>REPARTO:</strong> ' + esc(camion || '') + '</div>' +
-      tablaBloque('❄ FRÍOS', frios) +
-      tablaBloque('📦 SECOS', secos) +
+
+    var piePag = (numHoja !== '' && totalHojas !== '')
+      ? (' · Hoja ' + numHoja + ' de ' + totalHojas)
+      : '';
+
+    return '<div class="print-page" style="page-break-after:always;font-family:Segoe UI,Arial,sans-serif;color:#0f172a;background:#fff;">' +
+      '<div style="display:flex;align-items:center;gap:14px;border-bottom:3px solid #1d4ed8;padding-bottom:10px;margin-bottom:12px;">' +
+        '<img src="' + LOGO_URL + '" alt="IEM" style="height:48px;width:auto;object-fit:contain;" onerror="this.style.display=\'none\'" />' +
+        '<div style="flex:1;">' +
+          '<div style="font-size:14pt;font-weight:800;color:#1e3a5f;letter-spacing:.02em;">' + esc(titulo) + '</div>' +
+          '<div style="margin-top:4px;font-size:10pt;">' +
+            '<span style="background:#1d4ed8;color:#fff;padding:3px 10px;border-radius:999px;font-weight:700;">' + esc(camion || '') + '</span>' +
+            ' &nbsp; <strong>Fecha:</strong> ' + esc(fecha || '') + esc(piePag) +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      tablaBloque('❄ FRÍOS', '#0e7490', frios) +
+      tablaBloque('📦 SECOS', '#b45309', secos) +
+      '<div style="margin-top:14px;padding-top:8px;border-top:2px solid #1d4ed8;font-size:9pt;color:#475569;">IEM Group · Consolidado de carga' + esc(piePag) + '</div>' +
       '</div>';
   }
 
@@ -679,11 +713,7 @@
     });
   }
 
-  function imprimir(modo) {
-    if (!lineas.length) {
-      alert('No hay líneas para imprimir.');
-      return;
-    }
+  function armarHojasDocumento(modo) {
     enriquecerLineas();
     var fecha = ($('consFecha') || {}).value || new Date().toISOString().slice(0, 10);
     var camiones = {};
@@ -692,42 +722,91 @@
       camiones[l.camion].push(l);
     });
     var listaCam = Object.keys(camiones).sort();
-    var htmlBody = '';
+    var hojas = [];
+
+    function pushHoja(cam, items, titulo) {
+      hojas.push({ camion: cam, items: items, titulo: titulo || 'CONSOLIDADO DE CARGA - MERCADERÍA - GENERAL (R)', fecha: fecha });
+    }
 
     if (modo === 'uno') {
       var filtro = String(($('consCamion') || {}).value || ($('consFiltroCamion') || {}).value || '').trim();
       if (!filtro) {
-        alert('Selecciona un camión en la lista «Camión / ruta».');
-        return;
+        alert('Selecciona un camión en «Camión / ruta» o «Solo camión».');
+        return null;
       }
       var hit = listaCam.find(function (c) { return c.toUpperCase() === filtro.toUpperCase(); }) ||
         listaCam.find(function (c) { return c.toUpperCase().indexOf(filtro.toUpperCase()) >= 0; });
-      if (!hit) { alert('Camión no encontrado en los datos.'); return; }
-      htmlBody = buildPrintHtml('CONSOLIDADO DE CARGA - MERCADERÍA - GENERAL (R)', hit, camiones[hit], fecha);
+      if (!hit) { alert('Camión no encontrado en los datos.'); return null; }
+      pushHoja(hit, camiones[hit]);
     } else {
-      // multiple: todos los camiones, cada uno en página
-      listaCam.forEach(function (cam) {
-        htmlBody += buildPrintHtml('CONSOLIDADO DE CARGA - MERCADERÍA - GENERAL (R)', cam, camiones[cam], fecha);
-      });
-      // consolidado general al final
+      listaCam.forEach(function (cam) { pushHoja(cam, camiones[cam]); });
       var cons = consolidadoRows();
       cons.forEach(function (r) {
         var cat = catalogo.find(function (p) { return p.codigo === r.codigo; });
         r._categoria = lineaCategoria(r.descripcion, cat && (cat.linea || cat.marca));
         if (!r.tipo && cat) r.tipo = cat.tipo;
+        if (r.peso == null) r.peso = 0;
       });
-      htmlBody += buildPrintHtml('CONSOLIDADO GENERAL (FRÍOS / SECOS)', 'TODOS LOS CAMIONES', cons, fecha);
+      // sumar pesos en consolidado
+      var pesoMap = Object.create(null);
+      lineas.forEach(function (l) {
+        pesoMap[l.codigo] = (pesoMap[l.codigo] || 0) + (Number(l.peso) || 0);
+      });
+      cons.forEach(function (r) { r.peso = pesoMap[r.codigo] || 0; });
+      pushHoja('TODOS LOS CAMIONES', cons, 'CONSOLIDADO GENERAL (FRÍOS / SECOS)');
     }
+    return hojas;
+  }
 
+  function htmlDocumento(hojas) {
+    if (!hojas || !hojas.length) return '';
+    var total = hojas.length;
+    return hojas.map(function (h, i) {
+      return buildPrintHtml(h.titulo, h.camion, h.items, h.fecha, { numHoja: i + 1, totalHojas: total });
+    }).join('');
+  }
+
+  function mostrarVistaPrevia(modo) {
+    if (!lineas.length) {
+      alert('No hay líneas. Importa el Excel de carga primero.');
+      return;
+    }
+    var hojas = armarHojasDocumento(modo);
+    if (!hojas) return;
+    var body = $('consPreviewBody');
+    var modal = $('consPreviewModal');
+    if (!body || !modal) {
+      // fallback ventana
+      var w = window.open('', '_blank');
+      if (w) {
+        w.document.write('<!DOCTYPE html><html><head><title>Vista previa</title></head><body style="margin:12mm;">' + htmlDocumento(hojas) + '</body></html>');
+        w.document.close();
+      }
+      return;
+    }
+    body.innerHTML = htmlDocumento(hojas);
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    try { modal.scrollTop = 0; } catch (e) {}
+  }
+
+  function imprimir(modo) {
+    if (!lineas.length) {
+      alert('No hay líneas para imprimir.');
+      return;
+    }
+    var hojas = armarHojasDocumento(modo);
+    if (!hojas) return;
+    var htmlBody = htmlDocumento(hojas);
     var w = window.open('', '_blank');
     if (!w) {
       alert('Permite ventanas emergentes para imprimir.');
       return;
     }
     w.document.write('<!DOCTYPE html><html><head><title>Imprimir consolidado</title>' +
-      '<style>@media print { .print-page { page-break-after: always; } .print-page:last-child { page-break-after: auto; } }' +
-      'body{margin:12mm;}</style></head><body>' + htmlBody +
-      '<script>window.onload=function(){window.print();}</script></body></html>');
+      '<style>@media print { .print-page { page-break-after: always; } .print-page:last-child { page-break-after: auto; } body{margin:10mm;} }' +
+      'body{margin:12mm;background:#f1f5f9;}</style></head><body>' + htmlBody +
+      '<script>window.onload=function(){setTimeout(function(){window.print();},250);}</script></body></html>');
     w.document.close();
   }
 
@@ -881,6 +960,21 @@
     if ($('btnConsExcel')) $('btnConsExcel').addEventListener('click', function () { exportExcel('consolidado'); });
     if ($('btnConsPrintMulti')) $('btnConsPrintMulti').addEventListener('click', function () { imprimir('multi'); });
     if ($('btnConsPrintUno')) $('btnConsPrintUno').addEventListener('click', function () { imprimir('uno'); });
+    if ($('btnConsPreviewTodos')) $('btnConsPreviewTodos').addEventListener('click', function () { mostrarVistaPrevia('multi'); });
+    if ($('btnConsPreviewUno')) $('btnConsPreviewUno').addEventListener('click', function () { mostrarVistaPrevia('uno'); });
+    if ($('btnConsPreviewClose')) $('btnConsPreviewClose').addEventListener('click', function () {
+      var modal = $('consPreviewModal');
+      if (modal) { modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true'); }
+    });
+    if ($('btnConsPreviewPrint')) $('btnConsPreviewPrint').addEventListener('click', function () {
+      var body = $('consPreviewBody');
+      if (!body || !body.innerHTML) { alert('Abre primero la vista previa.'); return; }
+      var w = window.open('', '_blank');
+      if (!w) return;
+      w.document.write('<!DOCTYPE html><html><head><title>Imprimir</title><style>@media print{.print-page{page-break-after:always}.print-page:last-child{page-break-after:auto}}body{margin:10mm}</style></head><body>' +
+        body.innerHTML + '<script>window.onload=function(){window.print();}</script></body></html>');
+      w.document.close();
+    });
     if ($('btnConsDescontar')) $('btnConsDescontar').addEventListener('click', function () { descontarInventario(); });
     if ($('btnConsTema')) $('btnConsTema').addEventListener('click', function () {
       document.body.classList.toggle('light-theme');
