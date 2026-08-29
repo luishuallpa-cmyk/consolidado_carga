@@ -808,7 +808,7 @@
   }
 
   /** Ítems por hoja (A4 con cabecera IEM + grupos). Ajuste fino si hace falta. */
-  var ITEMS_POR_HOJA = 32;
+  var ITEMS_POR_HOJA = 22;
 
   function ordenarItemsParaHojas(items) {
     var list = (items || []).map(function (it) {
@@ -905,16 +905,18 @@
         lastCat = '';
         var nom = lastTipo === 'FRIOS' ? '❄ FRÍOS' : '📦 SECOS';
         var bg = lastTipo === 'FRIOS' ? '#0e7490' : '#b45309';
-        html += '<div class="blk-tipo" style="margin:12px 0 6px;padding:8px 12px;border-radius:8px;background:' + bg +
-          ';color:#fff;font-weight:800;font-size:12pt;page-break-after:avoid;">' + nom + '</div>';
+        html += '<div class="blk-tipo" style="margin:10px 0 6px;padding:7px 12px;border-radius:8px;background:' + bg +
+          ';color:#fff;font-weight:800;font-size:11pt;page-break-after:avoid;break-after:avoid;' +
+          '-webkit-print-color-adjust:exact;print-color-adjust:exact;">' + nom + '</div>';
       }
       if (r.categoria !== lastCat) {
         closeTable();
         lastCat = r.categoria;
-        html += '<div style="font-weight:700;margin:8px 0 4px;font-size:10pt;background:#1e3a5f;color:#fff;padding:5px 10px;border-radius:6px;page-break-after:avoid;">' +
+        html += '<div style="font-weight:700;margin:8px 0 4px;font-size:9.5pt;background:#1e3a5f;color:#fff;padding:5px 10px;border-radius:6px;' +
+          'page-break-after:avoid;break-after:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact;">' +
           esc(lastCat) + '</div>';
         html += '<table class="cons-print-table" style="width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:8px;page-break-inside:auto;">' +
-          '<thead style="display:table-header-group;"><tr style="background:#e2e8f0;">' +
+          '<thead style="display:table-header-group;-webkit-print-color-adjust:exact;print-color-adjust:exact;"><tr style="background:#e2e8f0;-webkit-print-color-adjust:exact;print-color-adjust:exact;">' +
           '<th style="border:1px solid #94a3b8;padding:5px 4px;width:40px;">ITEM</th>' +
           '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Código</th>' +
           '<th style="border:1px solid #94a3b8;padding:5px 4px;">Producto / Descripción</th>' +
@@ -980,8 +982,10 @@
     // page-break-after solo si no es la última hoja del documento se controla fuera;
     // cada print-page siempre puede romper después
     return '<div class="print-page" data-camion="' + esc(camion || '') + '" data-hoja="' + numHoja +
-      '" data-total="' + totalHojas + '" style="page-break-after:always;break-after:page;' +
-      'font-family:Segoe UI,Arial,sans-serif;color:#0f172a;background:#fff;box-sizing:border-box;">' +
+      '" data-total="' + totalHojas + '" style="page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid;' +
+      'font-family:Segoe UI,Arial,sans-serif;color:#0f172a;background:#fff;box-sizing:border-box;' +
+      'width:190mm;min-height:270mm;max-height:270mm;overflow:hidden;padding:0;margin:0 auto 12px auto;' +
+      '-webkit-print-color-adjust:exact;print-color-adjust:exact;">' +
       '<div class="print-header" style="display:flex;align-items:center;gap:14px;border-bottom:3px solid #1d4ed8;' +
       'padding-bottom:10px;margin-bottom:12px;page-break-after:avoid;">' +
         '<img src="' + LOGO_URL + '" alt="IEM" style="height:48px;width:auto;object-fit:contain;" onerror="this.style.display=\'none\'" />' +

@@ -66,36 +66,53 @@
     .cons-hint { font-size:.8rem; color:var(--c-muted); margin:0 0 .5rem; }
   
     @media print {
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       .no-print { display: none !important; }
-      body.cons-page { background: #fff !important; margin: 0; }
+      body.cons-page { background: #fff !important; margin: 0 !important; }
       .cons-head, .cons-card.no-print-section, .cons-hint, .cons-actions, .cons-toolbar-main,
-      #consFile, #consFolder, .btn, select, .cons-fecha-badge { display: none !important; }
-      .cons-wrap { max-width: none; padding: 0; margin: 0; }
+      .cons-status, #consFile, #consFolder, .btn, select, .cons-fecha-badge, .cons-preview-empty { display: none !important; }
+      .cons-wrap { max-width: none !important; padding: 0 !important; margin: 0 !important; }
       .cons-card { border: none !important; background: transparent !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; }
+      h3 { display: none !important; }
       .cons-preview-wrap {
         max-height: none !important;
         overflow: visible !important;
         background: #fff !important;
         border: none !important;
         padding: 0 !important;
+        margin: 0 !important;
       }
-      .cons-preview-inner { display: block; gap: 0; }
+      .cons-preview-inner {
+        display: block !important;
+        gap: 0 !important;
+        transform: none !important;
+      }
+      /* Cada bloque = 1 página física, igual que la vista previa */
       .print-page {
         box-shadow: none !important;
         width: 100% !important;
         max-width: none !important;
-        min-height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        height: auto !important;
         margin: 0 !important;
         padding: 0 !important;
         border-radius: 0 !important;
-        page-break-after: always;
-        break-after: page;
+        overflow: visible !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
       }
-      .print-page:last-child { page-break-after: auto; break-after: auto; }
-      .print-header, .blk-tipo { page-break-after: avoid; }
-      tr { page-break-inside: avoid; }
-      thead { display: table-header-group; }
-      @page { size: A4; margin: 10mm; }
+      .print-page:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
+      }
+      .print-header, .blk-tipo { page-break-after: avoid !important; break-after: avoid !important; }
+      table { page-break-inside: avoid !important; }
+      tr { page-break-inside: avoid !important; }
+      thead { display: table-header-group !important; }
+      @page { size: A4 portrait; margin: 8mm; }
     }
 
   </style>
