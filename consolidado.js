@@ -488,58 +488,139 @@
     document.querySelectorAll('[data-cons-vista]').forEach(function (b) {
       b.classList.toggle('active', b.getAttribute('data-cons-vista') === vista);
     });
-    renderVistaPreviaPanel();
+    try {
+      renderVistaPreviaPanel();
+    } catch (e) {
+      console.error('renderVistaPreviaPanel', e);
+      var inner = $('consPreviewInner');
+      if (inner) {
+        inner.innerHTML = '<p class="cons-preview-empty">Error al armar la vista previa: ' +
+          String((e && e.message) || e).replace(/</g, '') + '</p>';
+      }
+    }
   }
 
-  /** Vista previa del documento en el panel principal (mismo HTML que la impresión). */
-  function renderVistaPreviaPanel() {
+  function construirHojasVista(modoForzado) {
+    enriquecerLineas();
+    var fecha = ($('consFecha') || {}).value || new Date().toISOString().slice(0, 10);
+    var camiones = {};
+    lineas.forEach(function (l) {
+      var cam = String(l.camion || 'SIN CAMION').trim() || 'SIN CAMION';
+      if (!camiones[cam]) camiones[cam] = [];
+      camiones[cam].push(l);
+    });
+    var listaCam = Object.keys(camiones).sort();
+    var hojas = [];
+    var camSel = String(($('consCamion') || {}).value || ($('consFiltroCamion') || {}).value || '').trim();
+    var modo = modoForzado || (camSel ? 'uno' : 'multi');
+
+    function pushHoja(cam, items, titulo) {
+      var itemsCopy = (items || []).map(function (it) {
+        return Object.assign({}, it);
+      });
+      hojas.push({
+        camion: cam,
+        items: itemsCopy,
+        titulo: titulo || 'CONSOLIDADO DE CARGA - MERCADERÍA - GENERAL (R)',
+        fecha: fecha
+      });
+    }
+
+    if (modo === 'uno' && camSel) {
+      var hit = listaCam.find(function (c) { return c.toUpperCase() === camSel.toUpperCase(); }) ||
+        listaCam.find(function (c) { return c.toUpperCase().indexOf(camSel.toUpperCase()) >= 0; });
+      if (hit) {
+        pushHoja(hit, camiones[hit]);
+        return hojas;
+      }
+    }
+
+    listaCam.forEach(function (cam) { pushHoja(cam, camiones[cam]); });
+    try {
+      var cons = consolidadoRows();
+      cons.forEach(function (r) {
+        var cat = catalogo.find(function (p) { return p.codigo === r.codigo; });
+        r._categoria = lineaCategoria(r.descripcion, cat && (cat.linea || cat.marca));
+        if (!r.tipo && cat) r.tipo = cat.tipo;
+        if (r.peso == null) r.peso = 0;
+      });
+      var pesoMap = Object.create(null);
+      lineas.forEach(function (l) {
+        pesoMap[l.codigo] = (pesoMap[l.codigo] || 0) + (Number(l.peso) || 0);
+      });
+      cons.forEach(function (r) { r.peso = pesoMap[r.codigo] || 0; });
+      pushHoja('TODOS LOS CAMIONES', cons, 'CONSOLIDADO GENERAL (FRÍOS / SECOS)');
+    } catch (eCons) {
+      console.warn('consolidado hoja', eCons);
+    }
+    return hojas;
+  }
+
+  /** Vista previa EN LA MISMA PÁGINA (sin ventana emergente). */
+  function renderVistaPreviaPanel(modoForzado) {
     var inner = $('consPreviewInner');
     var res = $('consResumen');
-    if (!inner) return;
+    if (!inner) {
+      console.warn('Falta #consPreviewInner en el HTML');
+      return;
+    }
 
     if (!lineas.length) {
-      inner.innerHTML = '<p class="cons-preview-empty">Importa el Excel del día. Aquí verás la <strong>vista previa</strong> del documento (mismo diseño que al imprimir).</p>';
+      inner.innerHTML = '<p class="cons-preview-empty">Importa el Excel del día. Aquí verás la vista previa del documento (igual que al imprimir).</p>';
       if (res) res.textContent = '0 líneas';
       return;
     }
 
-    enriquecerLineas();
-    var camSel = String(($('consCamion') || {}).value || '').trim();
-    var hojas = null;
-
-    if (camSel) {
-      // Misma lógica que armarHojasDocumento('uno') sin alert si falla
-      var camiones = {};
-      lineas.forEach(function (l) {
-        if (!camiones[l.camion]) camiones[l.camion] = [];
-        camiones[l.camion].push(l);
-      });
-      var listaCam = Object.keys(camiones).sort();
-      var hit = listaCam.find(function (c) { return c.toUpperCase() === camSel.toUpperCase(); }) ||
-        listaCam.find(function (c) { return c.toUpperCase().indexOf(camSel.toUpperCase()) >= 0; });
-      var fecha = ($('consFecha') || {}).value || new Date().toISOString().slice(0, 10);
-      if (hit) {
-        hojas = [{ camion: hit, items: camiones[hit], titulo: 'CONSOLIDADO DE CARGA - MERCADERÍA - GENERAL (R)', fecha: fecha }];
-      }
-    }
-    if (!hojas || !hojas.length) {
-      hojas = armarHojasDocumento('multi');
-    }
+    var hojas = construirHojasVista(modoForzado);
     if (!hojas || !hojas.length) {
       inner.innerHTML = '<p class="cons-preview-empty">No hay hojas para mostrar.</p>';
       if (res) res.textContent = lineas.length + ' línea(s)';
       return;
     }
 
-    inner.innerHTML = htmlDocumento(hojas) || '<p class="cons-preview-empty">Sin contenido.</p>';
+    var html = '';
+    try {
+      html = htmlDocumento(hojas);
+    } catch (eH) {
+      console.error(eH);
+      inner.innerHTML = '<p class="cons-preview-empty">Error generando documento: ' + String((eH && eH.message) || eH).replace(/</g, '') + '</p>';
+      return;
+    }
+
+    if (!html) {
+      inner.innerHTML = '<p class="cons-preview-empty">Sin contenido de documento.</p>';
+      return;
+    }
+
+    inner.innerHTML = html;
+    // asegurar que las páginas se vean con fondo blanco
+    try {
+      inner.querySelectorAll('.print-page').forEach(function (el) {
+        el.style.background = '#fff';
+        el.style.color = '#0f172a';
+        el.style.boxShadow = '0 4px 20px rgba(0,0,0,.35)';
+        el.style.width = '210mm';
+        el.style.maxWidth = '100%';
+        el.style.boxSizing = 'border-box';
+        el.style.padding = el.style.padding || '10mm 12mm';
+        el.style.margin = '0 auto';
+      });
+    } catch (eS) {}
 
     var nItems = 0;
     hojas.forEach(function (h) { nItems += (h.items && h.items.length) || 0; });
+    var camSel = String(($('consCamion') || {}).value || '').trim();
     if (res) {
       res.textContent = lineas.length + ' línea(s) · vista previa: ' +
         (camSel ? camSel : (hojas.length + ' hoja(s)')) +
-        ' · ' + nItems + ' ítem(s) en documento';
+        ' · ' + nItems + ' ítem(s)';
     }
+
+    // scroll al preview
+    try {
+      var wrap = $('consPreviewWrap');
+      if (wrap) wrap.scrollTop = 0;
+    } catch (e2) {}
   }
 
 
@@ -833,10 +914,30 @@
       alert('No hay líneas para imprimir.');
       return;
     }
-    var hojas = armarHojasDocumento(modo);
-    if (!hojas) return;
-    var htmlBody = htmlDocumento(hojas);
-    abrirVistaPrevia(htmlBody, !!autoPrint);
+    // Sin ventana emergente: mostrar en el panel y (si se pide) imprimir esta página
+    var modoPanel = (modo === 'uno') ? 'uno' : 'multi';
+    if (modo === 'uno') {
+      var filtro = String(($('consCamion') || {}).value || '').trim();
+      if (!filtro) {
+        alert('Selecciona un camión en la lista «Camión».');
+        return;
+      }
+    }
+    try {
+      renderVistaPreviaPanel(modoPanel);
+    } catch (e) {
+      console.error(e);
+      alert('No se pudo generar la vista previa: ' + ((e && e.message) || e));
+      return;
+    }
+    // Scroll al documento
+    try {
+      var wrap = $('consPreviewWrap');
+      if (wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e2) {}
+    if (autoPrint) {
+      setTimeout(function () { window.print(); }, 300);
+    }
   }
 
   function exportExcel(modo) {
@@ -986,8 +1087,8 @@
     if ($('btnConsExcelUno')) $('btnConsExcelUno').addEventListener('click', function () { exportExcel('un_camion'); });
     if ($('btnConsExcel')) $('btnConsExcel').addEventListener('click', function () { exportExcel('consolidado'); });
     // Vista previa tipo Acrobat (hojas con diseño). El botón de la barra de la ventana permite imprimir o guardar PDF.
-    if ($('btnConsPrintMulti')) $('btnConsPrintMulti').addEventListener('click', function () { imprimir('multi', false); });
-    if ($('btnConsPrintUno')) $('btnConsPrintUno').addEventListener('click', function () { imprimir('uno', false); });
+    if ($('btnConsPrintMulti')) $('btnConsPrintMulti').addEventListener('click', function () { imprimir('multi', true); });
+    if ($('btnConsPrintUno')) $('btnConsPrintUno').addEventListener('click', function () { imprimir('uno', true); });
     if ($('btnConsPreviewUno')) $('btnConsPreviewUno').addEventListener('click', function () { imprimir('uno', false); });
     if ($('btnConsPreviewMulti')) $('btnConsPreviewMulti').addEventListener('click', function () { imprimir('multi', false); });
     if ($('btnConsDescontar')) $('btnConsDescontar').addEventListener('click', function () { descontarInventario(); });
