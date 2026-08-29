@@ -148,7 +148,7 @@
       overflow: hidden;
     }
     .cons-sidebar {
-      width: 200px;
+      width: 168px;
       flex-shrink: 0;
       background: var(--c-card);
       border-right: 1px solid var(--c-border);
@@ -206,7 +206,7 @@
     <aside class="cons-sidebar no-print">
       <div class="cons-side-head">
         <h1>📦 Carga</h1>
-        <div class="cons-status" id="consStatus" style="font-size:.75rem">…</div>
+        <div class="cons-status" id="consStatus" hidden></div>
       </div>
 
       <div class="cons-side-block">
@@ -226,7 +226,7 @@
           <input type="file" id="consFolder" webkitdirectory directory multiple hidden />
         </label>
         <button type="button" class="btn btn-outline btn-sm" id="btnConsRefrescarCarpeta" style="width:100%;margin-top:.35rem">↻ Actualizar</button>
-        <p class="cons-status" id="consImportStatus" style="font-size:.72rem;margin-top:.4rem">Sin archivo</p>
+        <p class="cons-status" id="consImportStatus" hidden></p>
       </div>
 
       <div class="cons-side-block">
@@ -250,8 +250,8 @@
         <button type="button" class="btn btn-outline btn-sm" id="btnConsTema" style="width:100%;margin-top:.35rem">Tema</button>
       </div>
 
-      <p class="cons-status" id="consResumen" style="font-size:.72rem"></p>
-      <p class="cons-status" id="consPdfStatus" style="font-size:.72rem"></p>
+      <p class="cons-status" id="consResumen" hidden></p>
+      <p class="cons-status" id="consPdfStatus" hidden></p>
     </aside>
 
     <main class="cons-main">

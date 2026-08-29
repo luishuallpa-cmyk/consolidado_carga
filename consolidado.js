@@ -564,8 +564,8 @@
   }
 
   function setPdfStatus(msg) {
-    var el = $('consPdfStatus');
-    if (el) el.textContent = msg || '';
+    /* silencioso: no saturar el panel lateral */
+    try { if (window.__IEM_DEBUG_PDF) console.log('[pdf]', msg); } catch (e) {}
   }
 
   /**
@@ -583,32 +583,36 @@
     var Jspdf = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
     if (!Jspdf) throw new Error('jsPDF no cargó');
 
-    // Host debe estar "visible" para el capturador (opacity baja, en viewport)
-    host.style.cssText = 'position:fixed;left:0;top:0;width:794px;background:#fff;z-index:-1;opacity:0.01;pointer-events:none;overflow:visible;';
+    host.style.cssText = 'position:fixed;left:0;top:0;width:720px;background:#fff;z-index:-1;opacity:0.01;pointer-events:none;overflow:visible;';
 
-    setPdfStatus('Generando PDF… 0/' + pages.length);
-    // Esperar logo / layout
-    await new Promise(function (r) { setTimeout(r, 20); });
-
-    var pdf = new Jspdf({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
-    var margin = 8;
+    // Márgenes más ajustados → más área útil, menos escala
+    var margin = 5;
     var contentW = 210 - margin * 2;
     var contentH = 297 - margin * 2;
 
-    for (var i = 0; i < pages.length; i++) {
-      setPdfStatus('Generando PDF… ' + (i + 1) + '/' + pages.length + ' (puede tardar)');
-      var el = pages[i];
-      el.style.cssText = 'width:190mm;background:#fff;color:#0f172a;padding:6mm;box-sizing:border-box;margin:0;font-family:Segoe UI,Arial,sans-serif;';
-      var canvas = await html2canvas(el, {
-        scale: 1.35,
+    // Captura en paralelo (más rápido que una a una)
+    var els = Array.prototype.slice.call(pages);
+    els.forEach(function (el) {
+      el.style.cssText = 'width:180mm;background:#fff;color:#0f172a;padding:4mm;box-sizing:border-box;margin:0;font-family:Segoe UI,Arial,sans-serif;';
+    });
+
+    var canvases = await Promise.all(els.map(function (el) {
+      return html2canvas(el, {
+        scale: 1.15,
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
-        imageTimeout: 5000
+        imageTimeout: 3000,
+        removeContainer: true
       });
-      if (!canvas || !canvas.width) throw new Error('Captura vacía en hoja ' + (i + 1));
-      var img = canvas.toDataURL('image/jpeg', 0.82);
+    }));
+
+    var pdf = new Jspdf({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+    for (var i = 0; i < canvases.length; i++) {
+      var canvas = canvases[i];
+      if (!canvas || !canvas.width) continue;
+      var img = canvas.toDataURL('image/jpeg', 0.72);
       var imgW = contentW;
       var imgH = (canvas.height * imgW) / canvas.width;
       if (imgH > contentH) {
@@ -617,14 +621,13 @@
         imgH = contentH;
       }
       if (i > 0) pdf.addPage();
-      pdf.addImage(img, 'JPEG', margin + (contentW - imgW) / 2, margin, imgW, imgH);
+      pdf.addImage(img, 'JPEG', margin + (contentW - imgW) / 2, margin, imgW, imgH, undefined, 'FAST');
     }
 
     revokePdfUrl();
     var blob = pdf.output('blob');
     _pdfBlobUrl = URL.createObjectURL(blob);
     if (frame) frame.src = _pdfBlobUrl;
-    setPdfStatus('Listo · ' + pages.length + ' página(s)');
     if (autoDownload) {
       pdf.save(filename || 'consolidado_carga.pdf');
     }
@@ -679,10 +682,7 @@
       detalleCam.push((h.camion || '?') + ': ' + parts.length + ' pág.');
     });
     var camSel = String(($('consCamion') || {}).value || '').trim();
-    if (res) {
-      res.textContent = lineas.length + ' línea(s) · ' + nPaginas + ' pág. PDF · ' +
-        (camSel ? camSel : detalleCam.join(' · ')) + ' · ' + nItems + ' ítem(s)';
-    }
+    if (res) { res.textContent = ""; }
 
     // Generar PDF real para el iframe (asíncrono)
     setPdfStatus('Preparando PDF…');
