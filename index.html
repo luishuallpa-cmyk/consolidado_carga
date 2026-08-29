@@ -120,6 +120,26 @@
     @media print {
       .cons-pdf-frame { display: none !important; }
     }
+  
+    #consPreviewInner {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 794px;
+      background: #fff;
+      color: #0f172a;
+      z-index: -1;
+      opacity: 0.01;
+      pointer-events: none;
+      overflow: visible;
+    }
+    #consPreviewInner .print-page {
+      width: 190mm;
+      background: #fff;
+      padding: 6mm;
+      box-sizing: border-box;
+      margin-bottom: 8px;
+    }
   </style>
 </head>
 <body class="cons-page">
@@ -138,7 +158,6 @@
 
     <div class="cons-card no-print-section">
       <h3 style="margin:0 0 .4rem;font-size:1rem;">1. Cargar Excel del día</h3>
-      <p class="cons-hint no-print">El documento se ve abajo (Fríos/Secos y líneas del catálogo). Elige un camión o deja «todos». Los botones solo <strong>imprimen</strong> esta página (Ctrl+P · Guardar como PDF). Activa «Gráficos de fondo» si faltan colores.</p>
       <div class="cons-actions">
         <label class="btn btn-primary btn-sm" style="cursor:pointer">
           📄 Elegir Excel
@@ -150,11 +169,11 @@
         </label>
         <button type="button" class="btn btn-outline btn-sm" id="btnConsRefrescarCarpeta" title="Volver a leer la última carpeta/archivos">↻ Actualizar datos</button>
       </div>
-      <p class="cons-status" id="consImportStatus">Sin archivo. Fecha de reparto se calcula sola (mañana; domingo → lunes).</p>
+      <p class="cons-status" id="consImportStatus">Sin archivo.</p>
     </div>
 
     <div class="cons-card">
-      <h3 class="no-print" style="margin:0 0 .4rem;font-size:1rem;">2. Generar e imprimir</h3>
+      <h3 class="no-print" style="margin:0 0 .4rem;font-size:1rem;">2. Camión y PDF</h3>
       <div class="cons-actions no-print" style="margin-bottom:.5rem">
         <label style="font-size:.85rem;color:var(--c-muted)">Camión:</label>
         <select id="consCamion" style="min-width:160px">
@@ -170,20 +189,18 @@
         </select>
       </div>
       <div class="cons-toolbar-main no-print">
-        <button type="button" class="btn btn-primary" id="btnConsPrintUno" title="Genera PDF del camión (vista previa = archivo final)">📄 PDF camión</button>
-        <button type="button" class="btn btn-primary" id="btnConsPrintMulti" title="Genera PDF de todos los camiones (vista previa = archivo final)">📄 PDF todos</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsExcelTodos" title="Descarga un archivo Excel (.xlsx) con una hoja por camión + consolidado. Útil para archivar o usar en otros sistemas; no es la impresión con diseño.">📥 Exportar Excel</button>
+        <button type="button" class="btn btn-primary" id="btnConsPrintUno" title="Genera PDF del camión (vista previa = archivo final)">PDF camión</button>
+        <button type="button" class="btn btn-primary" id="btnConsPrintMulti" title="Genera PDF de todos los camiones (vista previa = archivo final)">PDF todos</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btnConsExcelTodos" title="Descarga un archivo Excel (.xlsx) con una hoja por camión + consolidado. Útil para archivar o usar en otros sistemas; no es la impresión con diseño.">Excel</button>
       </div>
       <p class="cons-status no-print" id="consResumen">0 líneas</p>
-      <p class="cons-hint no-print">El documento se ve abajo (Fríos/Secos y líneas del catálogo). Elige un camión o deja «todos». Los botones solo <strong>imprimen</strong> esta página (Ctrl+P · Guardar como PDF). Activa «Gráficos de fondo» si faltan colores.</p>
-
-            <div class="cons-preview-wrap" id="consPreviewWrap" style="margin-top:.75rem">
-        <p class="cons-status no-print" id="consPdfStatus" style="margin:.25rem 0 .5rem">Vista previa = PDF real (igual que al descargar/imprimir).</p>
-        <iframe id="consPdfFrame" title="Vista previa PDF" class="cons-pdf-frame" style="width:100%;height:min(75vh,900px);border:1px solid var(--c-border);border-radius:12px;background:#525659;"></iframe>
-        <!-- Host oculto: se renderiza HTML → canvas → PDF -->
-        <div id="consPreviewInner" class="cons-preview-inner" aria-hidden="true" style="position:absolute;left:-9999px;top:0;width:210mm;background:#fff;pointer-events:none;"></div>
+      <div class="cons-preview-wrap" id="consPreviewWrap" style="margin-top:.5rem;background:transparent;border:none;padding:0;max-height:none;overflow:visible;">
+        <p class="cons-status no-print" id="consPdfStatus" style="margin:0 0 .4rem"></p>
+        <iframe id="consPdfFrame" title="Vista previa PDF" class="cons-pdf-frame"
+          style="width:100%;height:min(78vh,920px);border:1px solid var(--c-border);border-radius:12px;background:#525659;"></iframe>
       </div>
- oculta: se mantiene por compatibilidad de scripts antiguos -->
+      <!-- render host: visible para html2canvas, fuera de vista -->
+      <div id="consPreviewInner" class="cons-preview-inner" aria-hidden="true"></div>
       <div class="cons-table-wrap" id="consTableWrap" hidden>
         <table class="cons-table" id="consTabla">
           <thead id="consThead"></thead>

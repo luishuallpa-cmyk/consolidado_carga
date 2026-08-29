@@ -579,45 +579,41 @@
     var pages = host.querySelectorAll('.print-page');
     if (!pages.length) throw new Error('No hay hojas para el PDF');
 
-    if (!window.html2canvas) throw new Error('html2canvas no cargó (revisa internet/CDN)');
+    if (!window.html2canvas) throw new Error('html2canvas no cargó');
     var Jspdf = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
-    if (!Jspdf) throw new Error('jsPDF no cargó (revisa internet/CDN)');
+    if (!Jspdf) throw new Error('jsPDF no cargó');
+
+    // Host debe estar "visible" para el capturador (opacity baja, en viewport)
+    host.style.cssText = 'position:fixed;left:0;top:0;width:794px;background:#fff;z-index:-1;opacity:0.01;pointer-events:none;overflow:visible;';
 
     setPdfStatus('Generando PDF… 0/' + pages.length);
+    // Esperar logo / layout
+    await new Promise(function (r) { setTimeout(r, 80); });
+
     var pdf = new Jspdf({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
-    var pageW = 210;
-    var pageH = 297;
     var margin = 8;
-    var contentW = pageW - margin * 2;
-    var contentH = pageH - margin * 2;
+    var contentW = 210 - margin * 2;
+    var contentH = 297 - margin * 2;
 
     for (var i = 0; i < pages.length; i++) {
-      setPdfStatus('Generando PDF… ' + (i + 1) + '/' + pages.length);
+      setPdfStatus('Generando PDF… ' + (i + 1) + '/' + pages.length + ' (puede tardar)');
       var el = pages[i];
-      // Asegurar fondo blanco y tamaño estable
-      el.style.background = '#ffffff';
-      el.style.width = '190mm';
-      el.style.maxHeight = 'none';
-      el.style.overflow = 'visible';
-      el.style.padding = '4mm';
-      el.style.boxSizing = 'border-box';
-
+      el.style.cssText = 'width:190mm;background:#fff;color:#0f172a;padding:6mm;box-sizing:border-box;margin:0;font-family:Segoe UI,Arial,sans-serif;';
       var canvas = await html2canvas(el, {
         scale: 2,
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
-        windowWidth: el.scrollWidth,
-        windowHeight: el.scrollHeight
+        imageTimeout: 5000
       });
-      var img = canvas.toDataURL('image/jpeg', 0.92);
+      if (!canvas || !canvas.width) throw new Error('Captura vacía en hoja ' + (i + 1));
+      var img = canvas.toDataURL('image/jpeg', 0.93);
       var imgW = contentW;
       var imgH = (canvas.height * imgW) / canvas.width;
       if (imgH > contentH) {
-        // escalar para que quepa en una página (ya partimos por ítems)
         var ratio = contentH / imgH;
-        imgW = imgW * ratio;
+        imgW *= ratio;
         imgH = contentH;
       }
       if (i > 0) pdf.addPage();
@@ -627,15 +623,14 @@
     revokePdfUrl();
     var blob = pdf.output('blob');
     _pdfBlobUrl = URL.createObjectURL(blob);
-    if (frame) {
-      frame.src = _pdfBlobUrl;
-    }
-    setPdfStatus('PDF listo · ' + pages.length + ' página(s) · igual que al descargar');
+    if (frame) frame.src = _pdfBlobUrl;
+    setPdfStatus('Listo · ' + pages.length + ' página(s)');
     if (autoDownload) {
       pdf.save(filename || 'consolidado_carga.pdf');
     }
     return pdf;
   }
+
 
   function renderVistaPreviaPanel(modoForzado) {
     var inner = $('consPreviewInner');
