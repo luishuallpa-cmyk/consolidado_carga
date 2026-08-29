@@ -129,6 +129,7 @@
       } else {
         l.tipo = clasificarProducto({ descripcion: l.descripcion, linea: l.linea, tipo: l.tipo });
       }
+      l._categoria = lineaCategoria(l.descripcion, l.linea);
     });
   }
 
@@ -625,25 +626,29 @@
 
 
   function lineaCategoria(desc, lineaCat) {
-    var s = String(lineaCat || desc || '').toUpperCase()
+    // Prioridad: línea del catálogo Supabase (ej. "LECHES FRESCAS: ENTERO (A)" → "LECHES FRESCAS")
+    var lin = String(lineaCat || '').trim();
+    if (lin) {
+      var part = lin.split(':')[0].trim();
+      if (part.length >= 2) return part.toUpperCase();
+      return lin.toUpperCase();
+    }
+    var s = String(desc || '').toUpperCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    if (/BASE DE HELADO|HELADO/.test(s) && /BASE|VAINILLA|CHOCOLATE/.test(s)) return 'BASE DE HELADO';
-    if (/BEBIDA|WATTS|REFRESCO|NARANJADA/.test(s)) return 'BEBIDAS: BEBIDAS';
-    if (/CHICHARRON/.test(s)) return 'CARNICOS: CHICHARRON';
-    if (/CHORIZO/.test(s)) return 'CARNICOS: CHORIZO';
-    if (/HOT DOG|SALCHICHA/.test(s)) return 'CARNICOS: HOT DOG';
-    if (/JAMON\b|JAMÓN/.test(s) && !/JAMONADA/.test(s)) return 'CARNICOS: JAMÓN';
-    if (/JAMONADA|MORTADELA/.test(s)) return 'CARNICOS: JAMONADA / MORTADELA';
-    if (/EVAPORAD|BOLSITARRO|PRACTITARRO|NUTRILAC/.test(s)) return 'EVAPORADAS: ENTERO (A)';
-    if (/YOGUR|YOG\.|BIO DEFENSA|GRIEGO/.test(s)) return 'YOGURES';
-    if (/QUESO|CREMA DE QUESO|MOZZARELLA|EDAM|PARMESANO|CHEDDAR|CREAM CHEESE/.test(s)) return 'QUESOS';
-    if (/MANTEQUILLA|MARGARINA/.test(s)) return 'MANTEQUILLAS / MARGARINAS';
-    if (/MANJAR|FUDGE|DULCE DE LECHE|SIROPE/.test(s)) return 'MANJARES / DULCES';
-    if (/LECHE|UHT|ALMENDRA|SOYA|COCO/.test(s)) return 'LECHES / BEBIDAS LÁCTEAS';
-    if (/CREMA DE LECHE/.test(s)) return 'CREMAS DE LECHE';
-    // del catálogo si viene tipo
+    if (/YOGUR|YOG\.|GRIEGO|PROBIOT|BIO DEFENSA/.test(s)) return 'YOGURES';
+    if (/QUESO|EDAM|MOZZARELL|PARMESANO|CHEDDAR|CREAM CHEESE/.test(s)) return 'QUESOS';
+    if (/MANTEQUILL/.test(s)) return 'MANTEQUILLAS';
+    if (/MARGARINA/.test(s)) return 'MARGARINAS';
+    if (/SALCHICH|JAMON|JAMÓN|CHORIZ|HOT DOG|CHICHARRON|EMBUTID|MORTADEL|JAMONADA|TOCIN/.test(s)) return 'EMBUTIDOS';
+    if (/MANJAR|FUDGE|DULCE DE LECHE|SIROPE|BASE DE HELADO/.test(s)) return 'MANJARES / DULCES';
+    if (/EVAPORAD|BOLSITARRO|PRACTITARRO|NUTRILAC|MEZCLA LACT/.test(s)) return 'EVAPORADAS';
+    if (/ALMENDRA|SOYA|COCO|VEGETAL/.test(s)) return 'BEBIDAS VEGETALES';
+    if (/WATTS|NARANJADA|REFRESCO/.test(s)) return 'BEBIDAS';
+    if (/LECHE|UHT|LACTEA|LACTEO/.test(s)) return 'LECHES';
+    if (/CREMA DE LECHE|CREMA DE/.test(s)) return 'CREMAS DE LECHE';
     return 'OTROS';
   }
+
 
   function cantACajasUnd(cant, factor) {
     var c = Number(cant) || 0;
@@ -678,7 +683,7 @@
       var grupos = Object.create(null);
       var orden = [];
       lista.forEach(function (it) {
-        var cat = it._categoria || lineaCategoria(it.descripcion);
+        var cat = it._categoria || lineaCategoria(it.descripcion, it.linea);
         if (!grupos[cat]) { grupos[cat] = []; orden.push(cat); }
         grupos[cat].push(it);
       });
@@ -863,60 +868,23 @@
   }
 
   function abrirVistaPrevia(htmlBody, autoPrint) {
-    // Ventana tipo Acrobat: vista previa de las hojas + botón Imprimir
-    var w = window.open('', '_blank', 'noopener,noreferrer,width=900,height=700');
-    if (!w) {
-      alert('El navegador bloqueó la ventana emergente. Permite pop-ups para este sitio y vuelve a intentar.');
-      return;
+    // DEPRECADO: no abrir popups. La vista va en #consPreviewInner.
+    if (htmlBody && $('consPreviewInner')) {
+      $('consPreviewInner').innerHTML = htmlBody;
     }
-    var css = [
-      '@page{size:A4;margin:12mm}',
-      'html,body{margin:0;padding:0;background:#525659;font-family:Segoe UI,Arial,sans-serif}',
-      '.toolbar{position:sticky;top:0;z-index:10;display:flex;gap:8px;align-items:center;padding:10px 14px;background:#1e293b;color:#f1f5f9;box-shadow:0 2px 8px rgba(0,0,0,.35)}',
-      '.toolbar button{cursor:pointer;border:0;border-radius:8px;padding:8px 14px;font:inherit;font-size:14px;font-weight:600}',
-      '.btn-print{background:#3B6EA5;color:#fff}',
-      '.btn-close{background:#475569;color:#fff}',
-      '.hint{font-size:12px;color:#94a3b8;margin-left:8px}',
-      '.sheet-wrap{padding:16px;display:flex;flex-direction:column;align-items:center;gap:18px}',
-      '.print-page{background:#fff;width:210mm;min-height:297mm;box-sizing:border-box;padding:12mm;box-shadow:0 4px 20px rgba(0,0,0,.35);page-break-after:always}',
-      '.print-page:last-child{page-break-after:auto}',
-      '@media print{',
-      '  html,body{background:#fff!important}',
-      '  .toolbar{display:none!important}',
-      '  .sheet-wrap{padding:0;gap:0}',
-      '  .print-page{box-shadow:none;width:auto;min-height:auto;margin:0;padding:0}',
-      '  .print-page{page-break-after:always}',
-      '  .print-page:last-child{page-break-after:auto}',
-      '}'
-    ].join('\n');
-    w.document.open();
-    w.document.write(
-      '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/><title>Vista previa · Consolidado de carga</title>' +
-      '<style>' + css + '</style></head><body>' +
-      '<div class="toolbar">' +
-        '<button type="button" class="btn-print" id="btnDoPrint">🖨 Imprimir</button>' +
-        '<button type="button" class="btn-close" id="btnDoClose">Cerrar</button>' +
-        '<span class="hint">Vista previa tipo documento · Usa «Imprimir» o Ctrl+P · En el diálogo elige «Guardar como PDF» si quieres archivo</span>' +
-      '</div>' +
-      '<div class="sheet-wrap">' + htmlBody + '</div>' +
-      '<script>' +
-        'document.getElementById("btnDoPrint").onclick=function(){window.print()};' +
-        'document.getElementById("btnDoClose").onclick=function(){window.close()};' +
-        (autoPrint ? 'setTimeout(function(){window.print()},400);' : '') +
-      '<\/script></body></html>'
-    );
-    w.document.close();
-    try { w.focus(); } catch (e) {}
+    if (autoPrint) {
+      setTimeout(function () { window.print(); }, 250);
+    }
   }
+
 
   function imprimir(modo, autoPrint) {
     if (!lineas.length) {
       alert('No hay líneas para imprimir.');
       return;
     }
-    // Sin ventana emergente: mostrar en el panel y (si se pide) imprimir esta página
     var modoPanel = (modo === 'uno') ? 'uno' : 'multi';
-    if (modo === 'uno') {
+    if (modoPanel === 'uno') {
       var filtro = String(($('consCamion') || {}).value || '').trim();
       if (!filtro) {
         alert('Selecciona un camión en la lista «Camión».');
@@ -927,18 +895,20 @@
       renderVistaPreviaPanel(modoPanel);
     } catch (e) {
       console.error(e);
-      alert('No se pudo generar la vista previa: ' + ((e && e.message) || e));
+      alert('No se pudo generar el documento: ' + ((e && e.message) || e));
       return;
     }
-    // Scroll al documento
     try {
       var wrap = $('consPreviewWrap');
       if (wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e2) {}
-    if (autoPrint) {
-      setTimeout(function () { window.print(); }, 300);
+    if (autoPrint !== false) {
+      setTimeout(function () {
+        try { window.print(); } catch (e3) { alert('Usa Ctrl+P para imprimir.'); }
+      }, 350);
     }
   }
+
 
   function exportExcel(modo) {
     if (!window.XLSX) {

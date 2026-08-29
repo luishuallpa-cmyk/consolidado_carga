@@ -106,7 +106,7 @@
 
     <div class="cons-card no-print-section">
       <h3 style="margin:0 0 .4rem;font-size:1rem;">1. Cargar Excel del día</h3>
-      <p class="cons-hint no-print">La <strong>vista previa</strong> aparece abajo (mismo diseño que se imprime). Elige un camión para ver solo esa ruta. «Imprimir un camión / todos» actualiza la vista e abre el diálogo de impresión (Ctrl+P · Guardar como PDF). Activa «Gráficos de fondo» si faltan colores.</p>
+      <p class="cons-hint no-print">El documento se ve abajo (Fríos/Secos y líneas del catálogo). Elige un camión o deja «todos». Los botones solo <strong>imprimen</strong> esta página (Ctrl+P · Guardar como PDF). Activa «Gráficos de fondo» si faltan colores.</p>
       <div class="cons-actions">
         <label class="btn btn-primary btn-sm" style="cursor:pointer">
           📄 Elegir Excel
@@ -138,16 +138,16 @@
         </select>
       </div>
       <div class="cons-toolbar-main no-print">
-        <button type="button" class="btn btn-primary" id="btnConsPrintUno" title="Muestra abajo la vista previa del camión e imprime (Ctrl+P / Guardar PDF).">🖨 Imprimir un camión</button>
-        <button type="button" class="btn btn-primary" id="btnConsPrintMulti" title="Muestra abajo todos los camiones + consolidado e imprime.">🖨 Imprimir todos</button>
+        <button type="button" class="btn btn-primary" id="btnConsPrintUno" title="Imprime el camión seleccionado (sin ventana emergente)">🖨 Imprimir camión</button>
+        <button type="button" class="btn btn-primary" id="btnConsPrintMulti" title="Imprime todos los camiones + consolidado (sin ventana emergente)">🖨 Imprimir todos</button>
         <button type="button" class="btn btn-outline btn-sm" id="btnConsExcelTodos" title="Descarga un archivo Excel (.xlsx) con una hoja por camión + consolidado. Útil para archivar o usar en otros sistemas; no es la impresión con diseño.">📥 Exportar Excel</button>
       </div>
       <p class="cons-status no-print" id="consResumen">0 líneas</p>
-      <p class="cons-hint no-print">Abajo ves la <strong>vista previa del documento</strong> (mismo diseño que se imprime). Elige un camión para ver solo esa ruta, o deja sin elegir / usa «Imprimir todos». Los botones «Vista previa / Imprimir» también abren ventana aparte. «Exportar Excel» descarga .xlsx de datos (sin diseño visual).</p>
+      <p class="cons-hint no-print">El documento se ve abajo (Fríos/Secos y líneas del catálogo). Elige un camión o deja «todos». Los botones solo <strong>imprimen</strong> esta página (Ctrl+P · Guardar como PDF). Activa «Gráficos de fondo» si faltan colores.</p>
 
       <div class="cons-preview-wrap" id="consPreviewWrap" style="margin-top:.75rem">
         <div class="cons-preview-inner" id="consPreviewInner">
-          <p class="cons-preview-empty">Importa el Excel del día. Aquí verás la <strong>vista previa</strong> del documento (mismo diseño que al imprimir).<br>Elige un camión o usa «Vista previa / Imprimir todos».</p>
+          <p class="cons-preview-empty">Importa el Excel del día. El documento aparecerá aquí (listo para imprimir).</p>
         </div>
       </div>
       <!-- Tabla oculta: se mantiene por compatibilidad de scripts antiguos -->
