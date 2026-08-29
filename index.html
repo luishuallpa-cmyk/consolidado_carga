@@ -115,6 +115,11 @@
       @page { size: A4 portrait; margin: 8mm; }
     }
 
+  
+    .cons-pdf-frame { display:block; }
+    @media print {
+      .cons-pdf-frame { display: none !important; }
+    }
   </style>
 </head>
 <body class="cons-page">
@@ -165,19 +170,20 @@
         </select>
       </div>
       <div class="cons-toolbar-main no-print">
-        <button type="button" class="btn btn-primary" id="btnConsPrintUno" title="Imprime el camión seleccionado (sin ventana emergente)">🖨 Imprimir camión</button>
-        <button type="button" class="btn btn-primary" id="btnConsPrintMulti" title="Imprime todos los camiones + consolidado (sin ventana emergente)">🖨 Imprimir todos</button>
+        <button type="button" class="btn btn-primary" id="btnConsPrintUno" title="Genera PDF del camión (vista previa = archivo final)">📄 PDF camión</button>
+        <button type="button" class="btn btn-primary" id="btnConsPrintMulti" title="Genera PDF de todos los camiones (vista previa = archivo final)">📄 PDF todos</button>
         <button type="button" class="btn btn-outline btn-sm" id="btnConsExcelTodos" title="Descarga un archivo Excel (.xlsx) con una hoja por camión + consolidado. Útil para archivar o usar en otros sistemas; no es la impresión con diseño.">📥 Exportar Excel</button>
       </div>
       <p class="cons-status no-print" id="consResumen">0 líneas</p>
       <p class="cons-hint no-print">El documento se ve abajo (Fríos/Secos y líneas del catálogo). Elige un camión o deja «todos». Los botones solo <strong>imprimen</strong> esta página (Ctrl+P · Guardar como PDF). Activa «Gráficos de fondo» si faltan colores.</p>
 
-      <div class="cons-preview-wrap" id="consPreviewWrap" style="margin-top:.75rem">
-        <div class="cons-preview-inner" id="consPreviewInner">
-          <p class="cons-preview-empty">Importa el Excel del día. El documento aparecerá aquí (listo para imprimir).</p>
-        </div>
+            <div class="cons-preview-wrap" id="consPreviewWrap" style="margin-top:.75rem">
+        <p class="cons-status no-print" id="consPdfStatus" style="margin:.25rem 0 .5rem">Vista previa = PDF real (igual que al descargar/imprimir).</p>
+        <iframe id="consPdfFrame" title="Vista previa PDF" class="cons-pdf-frame" style="width:100%;height:min(75vh,900px);border:1px solid var(--c-border);border-radius:12px;background:#525659;"></iframe>
+        <!-- Host oculto: se renderiza HTML → canvas → PDF -->
+        <div id="consPreviewInner" class="cons-preview-inner" aria-hidden="true" style="position:absolute;left:-9999px;top:0;width:210mm;background:#fff;pointer-events:none;"></div>
       </div>
-      <!-- Tabla oculta: se mantiene por compatibilidad de scripts antiguos -->
+ oculta: se mantiene por compatibilidad de scripts antiguos -->
       <div class="cons-table-wrap" id="consTableWrap" hidden>
         <table class="cons-table" id="consTabla">
           <thead id="consThead"></thead>
@@ -190,6 +196,8 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="consolidado.js"></script>
 </body>
 </html>

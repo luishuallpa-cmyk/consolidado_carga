@@ -554,6 +554,89 @@
   }
 
   /** Vista previa EN LA MISMA PÁGINA (sin ventana emergente). */
+  var _pdfBlobUrl = null;
+
+  function revokePdfUrl() {
+    if (_pdfBlobUrl) {
+      try { URL.revokeObjectURL(_pdfBlobUrl); } catch (e) {}
+      _pdfBlobUrl = null;
+    }
+  }
+
+  function setPdfStatus(msg) {
+    var el = $('consPdfStatus');
+    if (el) el.textContent = msg || '';
+  }
+
+  /**
+   * Convierte las .print-page del host oculto en un PDF A4 real (html2canvas + jsPDF).
+   * La vista previa del iframe = el mismo archivo que se descarga.
+   */
+  async function generarPdfDesdeHojas(filename, autoDownload) {
+    var host = $('consPreviewInner');
+    var frame = $('consPdfFrame');
+    if (!host) throw new Error('Falta contenedor de render');
+    var pages = host.querySelectorAll('.print-page');
+    if (!pages.length) throw new Error('No hay hojas para el PDF');
+
+    if (!window.html2canvas) throw new Error('html2canvas no cargó (revisa internet/CDN)');
+    var Jspdf = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+    if (!Jspdf) throw new Error('jsPDF no cargó (revisa internet/CDN)');
+
+    setPdfStatus('Generando PDF… 0/' + pages.length);
+    var pdf = new Jspdf({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+    var pageW = 210;
+    var pageH = 297;
+    var margin = 8;
+    var contentW = pageW - margin * 2;
+    var contentH = pageH - margin * 2;
+
+    for (var i = 0; i < pages.length; i++) {
+      setPdfStatus('Generando PDF… ' + (i + 1) + '/' + pages.length);
+      var el = pages[i];
+      // Asegurar fondo blanco y tamaño estable
+      el.style.background = '#ffffff';
+      el.style.width = '190mm';
+      el.style.maxHeight = 'none';
+      el.style.overflow = 'visible';
+      el.style.padding = '4mm';
+      el.style.boxSizing = 'border-box';
+
+      var canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: el.scrollWidth,
+        windowHeight: el.scrollHeight
+      });
+      var img = canvas.toDataURL('image/jpeg', 0.92);
+      var imgW = contentW;
+      var imgH = (canvas.height * imgW) / canvas.width;
+      if (imgH > contentH) {
+        // escalar para que quepa en una página (ya partimos por ítems)
+        var ratio = contentH / imgH;
+        imgW = imgW * ratio;
+        imgH = contentH;
+      }
+      if (i > 0) pdf.addPage();
+      pdf.addImage(img, 'JPEG', margin + (contentW - imgW) / 2, margin, imgW, imgH);
+    }
+
+    revokePdfUrl();
+    var blob = pdf.output('blob');
+    _pdfBlobUrl = URL.createObjectURL(blob);
+    if (frame) {
+      frame.src = _pdfBlobUrl;
+    }
+    setPdfStatus('PDF listo · ' + pages.length + ' página(s) · igual que al descargar');
+    if (autoDownload) {
+      pdf.save(filename || 'consolidado_carga.pdf');
+    }
+    return pdf;
+  }
+
   function renderVistaPreviaPanel(modoForzado) {
     var inner = $('consPreviewInner');
     var res = $('consResumen');
@@ -563,14 +646,19 @@
     }
 
     if (!lineas.length) {
-      inner.innerHTML = '<p class="cons-preview-empty">Importa el Excel del día. Aquí verás la vista previa del documento (igual que al imprimir).</p>';
+      inner.innerHTML = '';
+      revokePdfUrl();
+      var frame = $('consPdfFrame');
+      if (frame) frame.src = 'about:blank';
+      setPdfStatus('Importa el Excel del día para generar el PDF de vista previa.');
       if (res) res.textContent = '0 líneas';
       return;
     }
 
     var hojas = construirHojasVista(modoForzado);
     if (!hojas || !hojas.length) {
-      inner.innerHTML = '<p class="cons-preview-empty">No hay hojas para mostrar.</p>';
+      inner.innerHTML = '';
+      setPdfStatus('No hay hojas para mostrar.');
       if (res) res.textContent = lineas.length + ' línea(s)';
       return;
     }
@@ -580,29 +668,10 @@
       html = htmlDocumento(hojas);
     } catch (eH) {
       console.error(eH);
-      inner.innerHTML = '<p class="cons-preview-empty">Error generando documento: ' + String((eH && eH.message) || eH).replace(/</g, '') + '</p>';
+      setPdfStatus('Error generando documento: ' + ((eH && eH.message) || eH));
       return;
     }
-
-    if (!html) {
-      inner.innerHTML = '<p class="cons-preview-empty">Sin contenido de documento.</p>';
-      return;
-    }
-
-    inner.innerHTML = html;
-    // asegurar que las páginas se vean con fondo blanco
-    try {
-      inner.querySelectorAll('.print-page').forEach(function (el) {
-        el.style.background = '#fff';
-        el.style.color = '#0f172a';
-        el.style.boxShadow = '0 4px 20px rgba(0,0,0,.35)';
-        el.style.width = '210mm';
-        el.style.maxWidth = '100%';
-        el.style.boxSizing = 'border-box';
-        el.style.padding = el.style.padding || '10mm 12mm';
-        el.style.margin = '0 auto';
-      });
-    } catch (eS) {}
+    inner.innerHTML = html || '';
 
     var nItems = 0;
     var nPaginas = 0;
@@ -612,21 +681,22 @@
       nItems += n;
       var parts = typeof partirItemsEnPaginas === 'function' ? partirItemsEnPaginas(h.items || []) : [{ rows: h.items || [] }];
       nPaginas += parts.length;
-      detalleCam.push((h.camion || '?') + ': ' + parts.length + ' hoja(s)');
+      detalleCam.push((h.camion || '?') + ': ' + parts.length + ' pág.');
     });
     var camSel = String(($('consCamion') || {}).value || '').trim();
     if (res) {
-      res.textContent = lineas.length + ' línea(s) · ' + nPaginas + ' hoja(s) · ' +
-        (camSel ? camSel : detalleCam.join(' · ')) +
-        ' · ' + nItems + ' ítem(s) · numeración por camión';
+      res.textContent = lineas.length + ' línea(s) · ' + nPaginas + ' pág. PDF · ' +
+        (camSel ? camSel : detalleCam.join(' · ')) + ' · ' + nItems + ' ítem(s)';
     }
 
-    // scroll al preview
-    try {
-      var wrap = $('consPreviewWrap');
-      if (wrap) wrap.scrollTop = 0;
-    } catch (e2) {}
+    // Generar PDF real para el iframe (asíncrono)
+    setPdfStatus('Preparando PDF…');
+    generarPdfDesdeHojas(null, false).catch(function (e) {
+      console.error(e);
+      setPdfStatus('No se pudo generar PDF: ' + ((e && e.message) || e) + ' — revisa CDN/internet');
+    });
   }
+
 
 
   /** Normaliza código a 4 dígitos cuando aplica (Uniflex / IEM). */
@@ -655,11 +725,6 @@
     return null;
   }
 
-  /**
-   * Categoría de línea para el documento.
-   * 1) Catálogo por CÓDIGO → campo linea de Supabase (más preciso)
-   * 2) Si no hay línea útil → heurística por nombre/descripción
-   */
   function lineaCategoria(desc, lineaCat, codigo) {
     var lin = String(lineaCat || '').trim();
 
@@ -1108,21 +1173,23 @@
       }
     }
     try {
-      renderVistaPreviaPanel(modoPanel);
+      // HTML en host oculto
+      var hojas = construirHojasVista(modoPanel);
+      var host = $('consPreviewInner');
+      if (host) host.innerHTML = htmlDocumento(hojas);
     } catch (e) {
       console.error(e);
-      alert('No se pudo generar el documento: ' + ((e && e.message) || e));
+      alert('No se pudo armar el documento: ' + ((e && e.message) || e));
       return;
     }
-    try {
-      var wrap = $('consPreviewWrap');
-      if (wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } catch (e2) {}
-    if (autoPrint !== false) {
-      setTimeout(function () {
-        try { window.print(); } catch (e3) { alert('Usa Ctrl+P para imprimir.'); }
-      }, 350);
-    }
+    var fecha = ($('consFecha') || {}).value || new Date().toISOString().slice(0, 10);
+    var cam = String(($('consCamion') || {}).value || '').trim() || 'todos';
+    var fname = 'consolidado_' + String(cam).replace(/\s+/g, '_') + '_' + fecha + '.pdf';
+    setPdfStatus('Generando PDF para descargar…');
+    generarPdfDesdeHojas(fname, true).catch(function (e) {
+      console.error(e);
+      alert('Error PDF: ' + ((e && e.message) || e));
+    });
   }
 
 
