@@ -582,19 +582,21 @@
     var Jspdf = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
     if (!Jspdf) throw new Error('jsPDF no cargó');
 
-    // Tamaño FIJO A4 en px (96dpi aprox) → todas las capturas iguales
-    var PAGE_W = 794;   // ~210mm
-    var PAGE_H = 1123;  // ~297mm
-    var marginMm = 6;
-    var contentWmm = 210 - marginMm * 2;
-    var contentHmm = 297 - marginMm * 2;
+    /**
+     * A4 a 96 dpi (html2canvas trabaja en CSS px):
+     * 210mm = 210 / 25.4 * 96 ≈ 794 px
+     * 297mm = 297 / 25.4 * 96 ≈ 1123 px
+     * Márgenes SOLO dentro del HTML (no en jsPDF) → evita doble margen y escalados raros.
+     */
+    var PAGE_W = 794;
+    var PAGE_H = 1123;
+    var PAD = 28; // ~7.4 mm de margen interno uniforme
 
     host.style.cssText = 'position:fixed;left:0;top:0;width:' + PAGE_W +
       'px;background:#fff;z-index:-1;opacity:0.01;pointer-events:none;overflow:visible;';
 
     var els = Array.prototype.slice.call(pages);
     els.forEach(function (el) {
-      // Caja fija: el contenido no “encoge” en hojas cortas
       el.style.cssText = [
         'width:' + PAGE_W + 'px',
         'height:' + PAGE_H + 'px',
@@ -602,7 +604,7 @@
         'max-height:' + PAGE_H + 'px',
         'overflow:hidden',
         'box-sizing:border-box',
-        'padding:18px 22px',
+        'padding:' + PAD + 'px',
         'margin:0',
         'background:#ffffff',
         'color:#0f172a',
@@ -612,14 +614,19 @@
       ].join(';');
     });
 
-    // Captura en paralelo, mismo tamaño de canvas
+    // scale 1 = 1 CSS px → 1 canvas px (predecible). 1.5 si se quiere más nitidez.
+    var SCALE = 1.5;
     var canvases = await Promise.all(els.map(function (el) {
       return html2canvas(el, {
-        scale: 1.25,
+        scale: SCALE,
         width: PAGE_W,
         height: PAGE_H,
         windowWidth: PAGE_W,
         windowHeight: PAGE_H,
+        x: 0,
+        y: 0,
+        scrollX: 0,
+        scrollY: 0,
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
@@ -633,10 +640,10 @@
     for (var i = 0; i < canvases.length; i++) {
       var canvas = canvases[i];
       if (!canvas || !canvas.width) continue;
-      // Siempre la misma caja en el PDF (sin reescalar distinto por hoja)
-      var img = canvas.toDataURL('image/jpeg', 0.78);
+      // Ocupa toda la página A4 (márgenes ya van en el HTML)
+      var img = canvas.toDataURL('image/jpeg', 0.82);
       if (i > 0) pdf.addPage();
-      pdf.addImage(img, 'JPEG', marginMm, marginMm, contentWmm, contentHmm, undefined, 'FAST');
+      pdf.addImage(img, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
     }
 
     revokePdfUrl();
@@ -883,7 +890,7 @@
   }
 
   /** Ítems por hoja (A4 con cabecera IEM + grupos). Ajuste fino si hace falta. */
-  var ITEMS_POR_HOJA = 26;
+  var ITEMS_POR_HOJA = 24;
 
   function ordenarItemsParaHojas(items) {
     var list = (items || []).map(function (it) {
@@ -980,8 +987,8 @@
         lastCat = '';
         var nom = lastTipo === 'FRIOS' ? '❄ FRÍOS' : '📦 SECOS';
         var bg = lastTipo === 'FRIOS' ? '#0e7490' : '#b45309';
-        html += '<div class="blk-tipo" style="margin:10px 0 6px;padding:7px 12px;border-radius:8px;background:' + bg +
-          ';color:#fff;font-weight:800;font-size:11pt;page-break-after:avoid;break-after:avoid;' +
+        html += '<div class="blk-tipo" style="margin:8px 0 4px;padding:6px 10px;border-radius:6px;background:' + bg +
+          ';color:#fff;font-weight:800;font-size:10.5pt;' +
           '-webkit-print-color-adjust:exact;print-color-adjust:exact;">' + nom + '</div>';
       }
       if (r.categoria !== lastCat) {
