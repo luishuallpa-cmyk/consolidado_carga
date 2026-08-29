@@ -140,44 +140,99 @@
       box-sizing: border-box;
       margin-bottom: 8px;
     }
+  
+    .cons-layout {
+      display: flex;
+      min-height: 100vh;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .cons-sidebar {
+      width: 200px;
+      flex-shrink: 0;
+      background: var(--c-card);
+      border-right: 1px solid var(--c-border);
+      padding: .75rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: .65rem;
+    }
+    .cons-side-head h1 { margin: 0; font-size: 1.05rem; }
+    .cons-side-block { display: flex; flex-direction: column; }
+    .cons-main {
+      flex: 1;
+      min-width: 0;
+      background: #3f3f46;
+      display: flex;
+      flex-direction: column;
+    }
+    .cons-pdf-frame {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #525659;
+    }
+    #consPreviewInner {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 794px;
+      background: #fff;
+      color: #0f172a;
+      z-index: -1;
+      opacity: 0.01;
+      pointer-events: none;
+      overflow: visible;
+    }
+    #consPreviewInner .print-page {
+      width: 190mm;
+      background: #fff;
+      padding: 5mm;
+      box-sizing: border-box;
+      margin-bottom: 6px;
+    }
+    @media (max-width: 720px) {
+      .cons-layout { flex-direction: column; height: auto; min-height: 100vh; overflow: auto; }
+      .cons-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--c-border); }
+      .cons-main { min-height: 70vh; }
+      .cons-pdf-frame { min-height: 70vh; }
+    }
   </style>
 </head>
 <body class="cons-page">
-  <div class="cons-wrap">
-    <div class="cons-head">
-      <div>
-        <h1>📦 Consolidado de carga</h1>
-        <div class="cons-status" id="consStatus">Cargando…</div>
+  <div class="cons-layout">
+    <aside class="cons-sidebar no-print">
+      <div class="cons-side-head">
+        <h1>📦 Carga</h1>
+        <div class="cons-status" id="consStatus" style="font-size:.75rem">…</div>
       </div>
-      <div class="cons-actions">
-        <span class="cons-fecha-badge" title="Fecha del reparto (día siguiente; si domingo → lunes)">📅 Reparto: <span id="consFechaLabel">—</span></span>
-        <input type="hidden" id="consFecha" />
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsTema">Tema</button>
-      </div>
-    </div>
 
-    <div class="cons-card no-print-section">
-      <h3 style="margin:0 0 .4rem;font-size:1rem;">1. Cargar Excel del día</h3>
-      <div class="cons-actions">
-        <label class="btn btn-primary btn-sm" style="cursor:pointer">
-          📄 Elegir Excel
+      <div class="cons-side-block">
+        <div class="cons-fecha-badge" style="width:100%;justify-content:center;font-size:.78rem">
+          📅 <span id="consFechaLabel">—</span>
+        </div>
+        <input type="hidden" id="consFecha" />
+      </div>
+
+      <div class="cons-side-block">
+        <label class="btn btn-primary btn-sm" style="cursor:pointer;width:100%;text-align:center;box-sizing:border-box">
+          Excel del día
           <input type="file" id="consFile" accept=".xlsx,.xls,.xlsm,.csv" multiple hidden />
         </label>
-        <label class="btn btn-outline btn-sm" style="cursor:pointer">
-          📁 Elegir carpeta
+        <label class="btn btn-outline btn-sm" style="cursor:pointer;width:100%;text-align:center;box-sizing:border-box;margin-top:.35rem">
+          Carpeta
           <input type="file" id="consFolder" webkitdirectory directory multiple hidden />
         </label>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsRefrescarCarpeta" title="Volver a leer la última carpeta/archivos">↻ Actualizar datos</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btnConsRefrescarCarpeta" style="width:100%;margin-top:.35rem">↻ Actualizar</button>
+        <p class="cons-status" id="consImportStatus" style="font-size:.72rem;margin-top:.4rem">Sin archivo</p>
       </div>
-      <p class="cons-status" id="consImportStatus">Sin archivo.</p>
-    </div>
 
-    <div class="cons-card">
-      <h3 class="no-print" style="margin:0 0 .4rem;font-size:1rem;">2. Camión y PDF</h3>
-      <div class="cons-actions no-print" style="margin-bottom:.5rem">
-        <label style="font-size:.85rem;color:var(--c-muted)">Camión:</label>
-        <select id="consCamion" style="min-width:160px">
-          <option value="">— Elegir camión —</option>
+      <div class="cons-side-block">
+        <label style="font-size:.78rem;color:var(--c-muted)">Camión</label>
+        <select id="consCamion" style="width:100%;margin-top:.25rem">
+          <option value="">Todos</option>
         </select>
         <select id="consFiltroCamion" hidden>
           <option value="">Todos los camiones</option>
@@ -188,26 +243,28 @@
           <option value="SECOS">Secos</option>
         </select>
       </div>
-      <div class="cons-toolbar-main no-print">
-        <button type="button" class="btn btn-primary" id="btnConsPrintUno" title="Genera PDF del camión (vista previa = archivo final)">PDF camión</button>
-        <button type="button" class="btn btn-primary" id="btnConsPrintMulti" title="Genera PDF de todos los camiones (vista previa = archivo final)">PDF todos</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsExcelTodos" title="Descarga un archivo Excel (.xlsx) con una hoja por camión + consolidado. Útil para archivar o usar en otros sistemas; no es la impresión con diseño.">Excel</button>
+
+      <div class="cons-side-block">
+        <button type="button" class="btn btn-primary btn-sm" id="btnConsPrintUno" style="width:100%">PDF camión</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btnConsPrintMulti" style="width:100%;margin-top:.35rem">PDF todos</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btnConsTema" style="width:100%;margin-top:.35rem">Tema</button>
       </div>
-      <p class="cons-status no-print" id="consResumen">0 líneas</p>
-      <div class="cons-preview-wrap" id="consPreviewWrap" style="margin-top:.5rem;background:transparent;border:none;padding:0;max-height:none;overflow:visible;">
-        <p class="cons-status no-print" id="consPdfStatus" style="margin:0 0 .4rem"></p>
-        <iframe id="consPdfFrame" title="Vista previa PDF" class="cons-pdf-frame"
-          style="width:100%;height:min(78vh,920px);border:1px solid var(--c-border);border-radius:12px;background:#525659;"></iframe>
-      </div>
-      <!-- render host: visible para html2canvas, fuera de vista -->
-      <div id="consPreviewInner" class="cons-preview-inner" aria-hidden="true"></div>
-      <div class="cons-table-wrap" id="consTableWrap" hidden>
-        <table class="cons-table" id="consTabla">
-          <thead id="consThead"></thead>
-          <tbody id="consTbody"></tbody>
-        </table>
-      </div>
-    </div>
+
+      <p class="cons-status" id="consResumen" style="font-size:.72rem"></p>
+      <p class="cons-status" id="consPdfStatus" style="font-size:.72rem"></p>
+    </aside>
+
+    <main class="cons-main">
+      <iframe id="consPdfFrame" title="Vista previa PDF" class="cons-pdf-frame"></iframe>
+    </main>
+  </div>
+
+  <div id="consPreviewInner" class="cons-preview-inner" aria-hidden="true"></div>
+  <div class="cons-table-wrap" id="consTableWrap" hidden>
+    <table class="cons-table" id="consTabla">
+      <thead id="consThead"></thead>
+      <tbody id="consTbody"></tbody>
+    </table>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

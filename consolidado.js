@@ -588,7 +588,7 @@
 
     setPdfStatus('Generando PDF… 0/' + pages.length);
     // Esperar logo / layout
-    await new Promise(function (r) { setTimeout(r, 80); });
+    await new Promise(function (r) { setTimeout(r, 20); });
 
     var pdf = new Jspdf({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
     var margin = 8;
@@ -600,7 +600,7 @@
       var el = pages[i];
       el.style.cssText = 'width:190mm;background:#fff;color:#0f172a;padding:6mm;box-sizing:border-box;margin:0;font-family:Segoe UI,Arial,sans-serif;';
       var canvas = await html2canvas(el, {
-        scale: 2,
+        scale: 1.35,
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
@@ -608,7 +608,7 @@
         imageTimeout: 5000
       });
       if (!canvas || !canvas.width) throw new Error('Captura vacía en hoja ' + (i + 1));
-      var img = canvas.toDataURL('image/jpeg', 0.93);
+      var img = canvas.toDataURL('image/jpeg', 0.82);
       var imgW = contentW;
       var imgH = (canvas.height * imgW) / canvas.width;
       if (imgH > contentH) {
@@ -1332,7 +1332,7 @@
         renderTabla();
       });
     });
-    if ($('btnConsExcelTodos')) $('btnConsExcelTodos').addEventListener('click', function () { exportExcel('todos'); });
+    /* Excel export removido de la UI */
     if ($('btnConsExcelUno')) $('btnConsExcelUno').addEventListener('click', function () { exportExcel('un_camion'); });
     if ($('btnConsExcel')) $('btnConsExcel').addEventListener('click', function () { exportExcel('consolidado'); });
     // Vista previa tipo Acrobat (hojas con diseño). El botón de la barra de la ventana permite imprimir o guardar PDF.
