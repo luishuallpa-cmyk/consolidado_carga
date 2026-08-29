@@ -578,32 +578,53 @@
     if (!host) throw new Error('Falta contenedor de render');
     var pages = host.querySelectorAll('.print-page');
     if (!pages.length) throw new Error('No hay hojas para el PDF');
-
     if (!window.html2canvas) throw new Error('html2canvas no cargó');
     var Jspdf = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
     if (!Jspdf) throw new Error('jsPDF no cargó');
 
-    host.style.cssText = 'position:fixed;left:0;top:0;width:720px;background:#fff;z-index:-1;opacity:0.01;pointer-events:none;overflow:visible;';
+    // Tamaño FIJO A4 en px (96dpi aprox) → todas las capturas iguales
+    var PAGE_W = 794;   // ~210mm
+    var PAGE_H = 1123;  // ~297mm
+    var marginMm = 6;
+    var contentWmm = 210 - marginMm * 2;
+    var contentHmm = 297 - marginMm * 2;
 
-    // Márgenes más ajustados → más área útil, menos escala
-    var margin = 5;
-    var contentW = 210 - margin * 2;
-    var contentH = 297 - margin * 2;
+    host.style.cssText = 'position:fixed;left:0;top:0;width:' + PAGE_W +
+      'px;background:#fff;z-index:-1;opacity:0.01;pointer-events:none;overflow:visible;';
 
-    // Captura en paralelo (más rápido que una a una)
     var els = Array.prototype.slice.call(pages);
     els.forEach(function (el) {
-      el.style.cssText = 'width:180mm;background:#fff;color:#0f172a;padding:4mm;box-sizing:border-box;margin:0;font-family:Segoe UI,Arial,sans-serif;';
+      // Caja fija: el contenido no “encoge” en hojas cortas
+      el.style.cssText = [
+        'width:' + PAGE_W + 'px',
+        'height:' + PAGE_H + 'px',
+        'min-height:' + PAGE_H + 'px',
+        'max-height:' + PAGE_H + 'px',
+        'overflow:hidden',
+        'box-sizing:border-box',
+        'padding:18px 22px',
+        'margin:0',
+        'background:#ffffff',
+        'color:#0f172a',
+        'font-family:Segoe UI,Arial,sans-serif',
+        'font-size:11px',
+        'line-height:1.25'
+      ].join(';');
     });
 
+    // Captura en paralelo, mismo tamaño de canvas
     var canvases = await Promise.all(els.map(function (el) {
       return html2canvas(el, {
-        scale: 1.15,
+        scale: 1.25,
+        width: PAGE_W,
+        height: PAGE_H,
+        windowWidth: PAGE_W,
+        windowHeight: PAGE_H,
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
-        imageTimeout: 3000,
+        imageTimeout: 2500,
         removeContainer: true
       });
     }));
@@ -612,16 +633,10 @@
     for (var i = 0; i < canvases.length; i++) {
       var canvas = canvases[i];
       if (!canvas || !canvas.width) continue;
-      var img = canvas.toDataURL('image/jpeg', 0.72);
-      var imgW = contentW;
-      var imgH = (canvas.height * imgW) / canvas.width;
-      if (imgH > contentH) {
-        var ratio = contentH / imgH;
-        imgW *= ratio;
-        imgH = contentH;
-      }
+      // Siempre la misma caja en el PDF (sin reescalar distinto por hoja)
+      var img = canvas.toDataURL('image/jpeg', 0.78);
       if (i > 0) pdf.addPage();
-      pdf.addImage(img, 'JPEG', margin + (contentW - imgW) / 2, margin, imgW, imgH, undefined, 'FAST');
+      pdf.addImage(img, 'JPEG', marginMm, marginMm, contentWmm, contentHmm, undefined, 'FAST');
     }
 
     revokePdfUrl();
@@ -868,7 +883,7 @@
   }
 
   /** Ítems por hoja (A4 con cabecera IEM + grupos). Ajuste fino si hace falta. */
-  var ITEMS_POR_HOJA = 22;
+  var ITEMS_POR_HOJA = 26;
 
   function ordenarItemsParaHojas(items) {
     var list = (items || []).map(function (it) {
