@@ -30,10 +30,79 @@
   }
 
   function tipoDe(p) {
-    var t = String(p.tipo_almacen || p.tipo || '').toUpperCase();
+    var t = String((p && (p.tipo_almacen || p.tipo)) || '').toUpperCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (t.indexOf('FRIO') !== -1) return 'FRIOS';
     if (t.indexOf('SECO') !== -1) return 'SECOS';
-    return t || 'SECOS';
+    return '';
+  }
+
+  /** Misma lógica orientativa que inventario: tipo_almacen > línea > descripción */
+  function clasificarProducto(p) {
+    if (!p) return 'SECOS';
+    var t = tipoDe(p);
+    if (t === 'FRIOS' || t === 'SECOS') return t;
+    var blob = (
+      String(p.linea || '') + ' ' +
+      String(p.descripcion || '') + ' ' +
+      String(p.marca || '')
+    ).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    // Fríos típicos Laive / IEM
+    if (/YOGUR|YOG\.|QUESO|MANTEQUILL|CREMA DE|LECHE FRES|UHT |SALCHICH|JAMON|JAMÓN|CHORIZ|HOT DOG|TOCIN|JAMONADA|MORTADEL|CHICHARRON|MOZZARELL|EDAM|PARMESANO|CHEDDAR|BIO DEFENSA|GRIEGO|PROBIOT|CREAM CHEESE|MARGARINA SWIS POTE/.test(blob)) {
+      return 'FRIOS';
+    }
+    // Secos / ambient
+    if (/EVAPORAD|BOLSITARRO|PRACTITARRO|MANJAR|FUDGE|WATTS|BEBIDA|ALMENDRA|NUTRILAC|SIROPE|BASE DE HELADO|DULCE DE LECHE/.test(blob)) {
+      return 'SECOS';
+    }
+    return 'SECOS';
+  }
+
+  function actualizarSelectCamiones() {
+    var cams = {};
+    lineas.forEach(function (l) {
+      if (l.camion) cams[l.camion] = true;
+    });
+    var lista = Object.keys(cams).sort();
+    ['consCamion', 'consFiltroCamion'].forEach(function (id) {
+      var sel = $(id);
+      if (!sel) return;
+      var prev = sel.value;
+      var esFiltro = id === 'consFiltroCamion';
+      sel.innerHTML = esFiltro
+        ? "<option value=''>Todos los camiones</option>"
+        : "<option value=''>— Selecciona camión —</option>";
+      lista.forEach(function (c) {
+        var opt = document.createElement('option');
+        opt.value = c;
+        opt.textContent = c;
+        sel.appendChild(opt);
+      });
+      if (prev && cams[prev]) sel.value = prev;
+      else if (!esFiltro && lista.length === 1) sel.value = lista[0];
+    });
+  }
+
+  function enriquecerDesdeCatalogo() {
+    if (!catalogo.length || !lineas.length) return;
+    var byCod = Object.create(null);
+    catalogo.forEach(function (p) { byCod[p.codigo] = p; });
+    lineas.forEach(function (l) {
+      var cod = String(l.codigo || '').trim();
+      if (/^\d{1,3}$/.test(cod)) cod = ('0000' + cod).slice(-4);
+      l.codigo = cod;
+      var cat = byCod[cod];
+      if (cat) {
+        l.tipo = cat.tipo || clasificarProducto(cat);
+        l.linea = cat.linea || l.linea || '';
+        l.descripcion = cat.descripcion || l.descripcion;
+        l.codigo_fabrica = cat.codigo_fabrica || l.codigo_fabrica || '';
+        if (cat.factor > 1 && !(l.factor > 1)) l.factor = cat.factor;
+        if (!l.unidad_ref && cat.unidad_ref) l.unidad_ref = cat.unidad_ref;
+      } else {
+        l.tipo = clasificarProducto({ descripcion: l.descripcion, linea: l.linea, tipo: l.tipo });
+      }
+    });
   }
 
   function loadLocal() {
@@ -114,8 +183,9 @@
       if (!camion) camion = 'SIN CAMION';
 
       var cat = catalogo.find(function (p) { return p.codigo === codigo; });
-      var tipo = cat ? cat.tipo : 'SECOS';
+      var tipo = cat ? cat.tipo : clasificarProducto({ descripcion: desc });
       var fab = cat ? cat.codigo_fabrica : '';
+      var linCat = cat ? (cat.linea || '') : '';
       if (!desc && cat) desc = cat.descripcion;
       if (!uref && cat) uref = cat.unidad_ref;
       if (!(factor > 1) && cat && cat.factor > 1) factor = cat.factor;
@@ -125,6 +195,7 @@
         codigo: codigo,
         descripcion: desc || codigo,
         tipo: tipo,
+        linea: linCat,
         unidad_ref: uref || und || '',
         factor: factor,
         cantidad: cant,
@@ -182,9 +253,9 @@
       alert('No se encontraron líneas del formato consolidado de carga.');
       return;
     }
-    // Reemplazar lista actual con lo importado (como el macro: filtra y arma)
     lineas = todas;
-    // Fecha desde nombre si posible
+    enriquecerDesdeCatalogo();
+    actualizarSelectCamiones();
     saveLocal();
     vista = 'consolidado';
     renderTabla();
@@ -200,8 +271,12 @@
   async function initSupabase() {
     var url = cfg.SUPABASE_URL || cfg.supabaseUrl;
     var key = cfg.SUPABASE_ANON_KEY || cfg.supabaseAnonKey || cfg.SUPABASE_KEY;
-    if (!url || !key || !window.supabase) {
-      status('Sin config Supabase (config.js).');
+    if (!window.supabase) {
+      status('Falta librería Supabase (CDN). Revisa internet.');
+      return false;
+    }
+    if (!url || !key) {
+      status('Falta config.js con SUPABASE_URL y SUPABASE_ANON_KEY (cópialo del inventario).');
       return false;
     }
     supabase = window.supabase.createClient(url, key);
@@ -234,31 +309,29 @@
       if (!res.data || !res.data.length) break;
       res.data.forEach(function (p) {
         if (p.activo === false) return;
-        var tipo = String(p.tipo_almacen || '').toUpperCase();
-        if (!tipo || (tipo.indexOf('FRIO') < 0 && tipo.indexOf('SECO') < 0)) {
-          var lin = String(p.linea || '').toUpperCase();
-          if (/FRIO|YOGUR|QUESO|MANTEQ|CREMA|LECHE FRES|SALCH|JAMON|CHORIZ|HOT DOG|TOCIN|JAMONADA/.test(lin + ' ' + (p.descripcion || ''))) {
-            tipo = 'FRIOS';
-          } else {
-            tipo = 'SECOS';
-          }
-        } else if (tipo.indexOf('FRIO') >= 0) tipo = 'FRIOS';
-        else tipo = 'SECOS';
-        catalogo.push({
+        var row = {
           codigo: String(p.codigo || '').trim(),
           codigo_fabrica: String(p.codigo_fabrica || '').trim(),
           descripcion: String(p.descripcion || '').trim(),
           unidad_ref: String(p.unidad_ref || '').trim(),
           factor: Number(p.factor_empaque) || 1,
           stock: Number(p.stock_teorico) || 0,
-          tipo: tipo,
+          tipo_almacen: String(p.tipo_almacen || '').trim(),
+          linea: String(p.linea || '').trim(),
           marca: String(p.marca || '').trim()
-        });
+        };
+        row.tipo = clasificarProducto(row);
+        catalogo.push(row);
       });
       if (res.data.length < PAGE) break;
       from += PAGE;
     }
-    status('Catálogo: ' + catalogo.length + ' productos activos · listos para consolidado');
+    status('Catálogo Supabase: ' + catalogo.length + ' productos · Fríos/Secos/líneas listos');
+    if (lineas.length) {
+      enriquecerDesdeCatalogo();
+      actualizarSelectCamiones();
+      renderTabla();
+    }
   }
 
   function buscar(q) {
@@ -364,6 +437,18 @@
     });
   }
 
+  function lineasFiltradas() {
+    var ft = String(($('consFiltroTipo') || {}).value || '').toUpperCase();
+    var fc = String(($('consFiltroCamion') || {}).value || '').trim();
+    return lineas.filter(function (l) {
+      if (ft === 'FRIOS' || ft === 'SECOS') {
+        if (String(l.tipo || '').toUpperCase() !== ft) return false;
+      }
+      if (fc && String(l.camion || '') !== fc) return false;
+      return true;
+    });
+  }
+
   function renderTabla() {
     var thead = $('consThead');
     var tbody = $('consTbody');
@@ -374,9 +459,11 @@
       b.classList.toggle('active', b.getAttribute('data-cons-vista') === vista);
     });
 
+    var data = lineasFiltradas();
+
     if (vista === 'detalle') {
       thead.innerHTML = '<tr><th></th><th>Camión</th><th>Tipo</th><th>Código</th><th>Descripción</th><th>Fábrica</th><th>Und.ref</th><th>Cant. und</th></tr>';
-      var sorted = lineas.slice().sort(function (a, b) {
+      var sorted = data.slice().sort(function (a, b) {
         if (a.camion !== b.camion) return String(a.camion).localeCompare(String(b.camion));
         if (a.tipo !== b.tipo) return a.tipo === 'FRIOS' ? -1 : 1;
         return String(a.codigo).localeCompare(String(b.codigo));
@@ -405,7 +492,10 @@
       });
       if (res) res.textContent = lineas.length + ' línea(s) · ' + sorted.length + ' en vista detalle';
     } else {
+      var prevLineas = lineas;
+      lineas = data;
       var rows = consolidadoRows();
+      lineas = prevLineas;
       thead.innerHTML = '<tr><th>Tipo</th><th>Código</th><th>Descripción</th><th>Fábrica</th><th>Und.ref</th><th>Factor</th><th>Total und</th><th>Cajas≈</th></tr>';
       var html = '';
       var lastTipo = '';
@@ -605,14 +695,14 @@
     var htmlBody = '';
 
     if (modo === 'uno') {
-      var filtro = String(($('consCamion') || {}).value || '').trim();
+      var filtro = String(($('consCamion') || {}).value || ($('consFiltroCamion') || {}).value || '').trim();
       if (!filtro) {
-        filtro = window.prompt('¿Qué camión imprimir?\n' + listaCam.join('\n'), listaCam[0] || '');
+        alert('Selecciona un camión en la lista «Camión / ruta».');
+        return;
       }
-      if (!filtro) return;
       var hit = listaCam.find(function (c) { return c.toUpperCase() === filtro.toUpperCase(); }) ||
         listaCam.find(function (c) { return c.toUpperCase().indexOf(filtro.toUpperCase()) >= 0; });
-      if (!hit) { alert('Camión no encontrado.'); return; }
+      if (!hit) { alert('Camión no encontrado en los datos.'); return; }
       htmlBody = buildPrintHtml('CONSOLIDADO DE CARGA - MERCADERÍA - GENERAL (R)', hit, camiones[hit], fecha);
     } else {
       // multiple: todos los camiones, cada uno en página
@@ -662,19 +752,17 @@
 
     var filtroCam = '';
     if (modo === 'un_camion') {
-      filtroCam = String(($('consCamion') || {}).value || '').trim();
+      filtroCam = String(($('consCamion') || {}).value || ($('consFiltroCamion') || {}).value || '').trim();
       if (!filtroCam) {
-        // pedir
-        filtroCam = window.prompt('¿Qué camión exportar?\nDisponibles:\n' + listaCam.join('\n'), listaCam[0] || '');
+        alert('Selecciona un camión en la lista «Camión / ruta».');
+        return;
       }
-      if (!filtroCam) return;
-      // match flexible
       var hit = listaCam.find(function (c) { return c.toUpperCase() === filtroCam.toUpperCase(); });
       if (!hit) {
         hit = listaCam.find(function (c) { return c.toUpperCase().indexOf(filtroCam.toUpperCase()) >= 0; });
       }
       if (!hit) {
-        alert('Camión no encontrado: ' + filtroCam);
+        alert('Ese camión no está en los datos importados.\nDisponibles: ' + listaCam.join(', '));
         return;
       }
       filtroCam = hit;
@@ -796,6 +884,16 @@
     if ($('btnConsDescontar')) $('btnConsDescontar').addEventListener('click', function () { descontarInventario(); });
     if ($('btnConsTema')) $('btnConsTema').addEventListener('click', function () {
       document.body.classList.toggle('light-theme');
+    });
+    if ($('consFiltroTipo')) $('consFiltroTipo').addEventListener('change', renderTabla);
+    if ($('consFiltroCamion')) $('consFiltroCamion').addEventListener('change', function () {
+      var v = $('consFiltroCamion').value;
+      if ($('consCamion') && v) $('consCamion').value = v;
+      renderTabla();
+    });
+    if ($('consCamion')) $('consCamion').addEventListener('change', function () {
+      var v = $('consCamion').value;
+      if ($('consFiltroCamion') && v) $('consFiltroCamion').value = v;
     });
     ['consFecha'].forEach(function (id) {
       var el = $(id);

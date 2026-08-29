@@ -74,14 +74,11 @@
           <input type="date" id="consFecha" />
         </div>
         <div>
-          <label>Camión / ruta</label>
-          <input type="text" id="consCamion" list="consCamionList" placeholder="Ej. CAMION 102" autocomplete="off" />
-          <datalist id="consCamionList">
-            <option value="CAMION 102"></option>
-            <option value="CAMION 103"></option>
-            <option value="CAMION 104"></option>
-            <option value="CAMION 105"></option>
-          </datalist>
+          <label>Camión / ruta (elegir de la lista)</label>
+          <select id="consCamion">
+            <option value="">— Selecciona camión —</option>
+          </select>
+          <p class="cons-status" style="margin:.25rem 0 0;font-size:.75rem">Se llena al importar el Excel. También puedes filtrar la vista por camión.</p>
         </div>
         <div style="grid-column:1/-1">
           <label>Buscar producto (código o nombre)</label>
@@ -107,6 +104,18 @@
     <div class="cons-tabs" role="tablist">
       <button type="button" class="cons-tab active" data-cons-vista="detalle">Detalle por camión</button>
       <button type="button" class="cons-tab" data-cons-vista="consolidado">Consolidado (Fríos / Secos)</button>
+    </div>
+    <div class="cons-actions" style="margin-bottom:.65rem">
+      <label style="font-size:.8rem;color:var(--c-muted)">Ver tipo:</label>
+      <select id="consFiltroTipo" style="max-width:140px;padding:.4rem .55rem;border-radius:8px;border:1px solid var(--c-border);background:var(--c-card);color:var(--c-text)">
+        <option value="">Todos</option>
+        <option value="FRIOS">❄ Fríos</option>
+        <option value="SECOS">📦 Secos</option>
+      </select>
+      <label style="font-size:.8rem;color:var(--c-muted);margin-left:.5rem">Solo camión:</label>
+      <select id="consFiltroCamion" style="max-width:180px;padding:.4rem .55rem;border-radius:8px;border:1px solid var(--c-border);background:var(--c-card);color:var(--c-text)">
+        <option value="">Todos los camiones</option>
+      </select>
     </div>
 
     <div class="cons-card">
