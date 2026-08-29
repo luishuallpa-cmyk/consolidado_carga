@@ -24,6 +24,40 @@
     .cons-fecha-badge { display:inline-flex; align-items:center; gap:.4rem; padding:.35rem .75rem; border-radius:999px; background:rgba(59,110,165,.2); border:1px solid var(--c-pri); font-size:.85rem; font-weight:600; }
     .cons-toolbar-main { display:flex; flex-wrap:wrap; gap:.5rem; margin:.5rem 0; }
     .cons-table-wrap { overflow:auto; max-height:42vh; border:1px solid var(--c-border); border-radius:12px; }
+    .cons-preview-wrap {
+      overflow: auto;
+      max-height: min(70vh, 900px);
+      border: 1px solid var(--c-border);
+      border-radius: 12px;
+      background: #525659;
+      padding: 12px 8px 20px;
+    }
+    body.light-theme .cons-preview-wrap { background: #94a3b8; }
+    .cons-preview-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      transform-origin: top center;
+    }
+    .cons-preview-inner .print-page {
+      width: 210mm;
+      max-width: 100%;
+      box-sizing: border-box;
+      background: #fff;
+      color: #0f172a;
+      padding: 10mm 12mm;
+      box-shadow: 0 4px 20px rgba(0,0,0,.35);
+      border-radius: 2px;
+    }
+    .cons-preview-empty {
+      color: #e2e8f0;
+      text-align: center;
+      padding: 2.5rem 1rem;
+      font-size: 0.9rem;
+    }
+    body.light-theme .cons-preview-empty { color: #0f172a; }
+
     .cons-table { width:100%; border-collapse:collapse; font-size:.82rem; }
     .cons-table th, .cons-table td { padding:.4rem .5rem; border-bottom:1px solid var(--c-border); text-align:left; white-space:nowrap; }
     .cons-table th { position:sticky; top:0; background:var(--c-card); z-index:1; }
@@ -85,14 +119,18 @@
         <button type="button" class="btn btn-outline btn-sm" id="btnConsExcelTodos" title="Descarga un archivo Excel (.xlsx) con una hoja por camión + consolidado. Útil para archivar o usar en otros sistemas; no es la impresión con diseño.">📥 Exportar Excel</button>
       </div>
       <p class="cons-status" id="consResumen">0 líneas</p>
-      <p class="cons-hint">Los botones «Vista previa / Imprimir» abren una ventana con las hojas en diseño de documento (logo IEM, categorías, tablas) — similar a Acrobat. Revisa, luego usa «Imprimir» o Ctrl+P (puedes elegir «Guardar como PDF»). En el diálogo de impresión activa «Gráficos de fondo» si no se ven los colores. El botón «Exportar Excel» solo descarga un .xlsx de datos (sin ese diseño visual); sirve para archivar o sistemas externos.</p>
+      <p class="cons-hint">Abajo ves la <strong>vista previa del documento</strong> (mismo diseño que se imprime). Elige un camión para ver solo esa ruta, o deja sin elegir / usa «Imprimir todos». Los botones «Vista previa / Imprimir» también abren ventana aparte. «Exportar Excel» descarga .xlsx de datos (sin diseño visual).</p>
 
-      <div class="cons-table-wrap" id="consTableWrap" style="margin-top:.75rem">
+      <div class="cons-preview-wrap" id="consPreviewWrap" style="margin-top:.75rem">
+        <div class="cons-preview-inner" id="consPreviewInner">
+          <p class="cons-preview-empty">Importa el Excel del día. Aquí verás la <strong>vista previa</strong> del documento (mismo diseño que al imprimir).<br>Elige un camión o usa «Vista previa / Imprimir todos».</p>
+        </div>
+      </div>
+      <!-- Tabla oculta: se mantiene por compatibilidad de scripts antiguos -->
+      <div class="cons-table-wrap" id="consTableWrap" hidden>
         <table class="cons-table" id="consTabla">
           <thead id="consThead"></thead>
-          <tbody id="consTbody">
-            <tr><td colspan="8" style="color:var(--c-muted);padding:1rem">Importa el Excel para ver el detalle aquí.</td></tr>
-          </tbody>
+          <tbody id="consTbody"></tbody>
         </table>
       </div>
     </div>

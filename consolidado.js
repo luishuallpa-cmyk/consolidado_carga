@@ -485,77 +485,63 @@
   }
 
   function renderTabla() {
-    var thead = $('consThead');
-    var tbody = $('consTbody');
-    var res = $('consResumen');
-    if (!thead || !tbody) return;
-
     document.querySelectorAll('[data-cons-vista]').forEach(function (b) {
       b.classList.toggle('active', b.getAttribute('data-cons-vista') === vista);
     });
+    renderVistaPreviaPanel();
+  }
 
-    var data = lineasFiltradas();
+  /** Vista previa del documento en el panel principal (mismo HTML que la impresión). */
+  function renderVistaPreviaPanel() {
+    var inner = $('consPreviewInner');
+    var res = $('consResumen');
+    if (!inner) return;
 
-    if (vista === 'detalle') {
-      thead.innerHTML = '<tr><th></th><th>Camión</th><th>Tipo</th><th>Código</th><th>Descripción</th><th>Fábrica</th><th>Und.ref</th><th>Cant. und</th></tr>';
-      var sorted = data.slice().sort(function (a, b) {
-        if (a.camion !== b.camion) return String(a.camion).localeCompare(String(b.camion));
-        if (a.tipo !== b.tipo) return a.tipo === 'FRIOS' ? -1 : 1;
-        return String(a.codigo).localeCompare(String(b.codigo));
+    if (!lineas.length) {
+      inner.innerHTML = '<p class="cons-preview-empty">Importa el Excel del día. Aquí verás la <strong>vista previa</strong> del documento (mismo diseño que al imprimir).</p>';
+      if (res) res.textContent = '0 líneas';
+      return;
+    }
+
+    enriquecerLineas();
+    var camSel = String(($('consCamion') || {}).value || '').trim();
+    var hojas = null;
+
+    if (camSel) {
+      // Misma lógica que armarHojasDocumento('uno') sin alert si falla
+      var camiones = {};
+      lineas.forEach(function (l) {
+        if (!camiones[l.camion]) camiones[l.camion] = [];
+        camiones[l.camion].push(l);
       });
-      tbody.innerHTML = sorted.map(function (l, i) {
-        var tipCls = l.tipo === 'FRIOS' ? 'badge-frio' : 'badge-seco';
-        return '<tr data-i="' + i + '">' +
-          '<td><button type="button" class="cons-del" data-idx="' + lineas.indexOf(l) + '" title="Quitar">✕</button></td>' +
-          '<td>' + esc(l.camion) + '</td>' +
-          '<td class="' + tipCls + '">' + esc(l.tipo) + '</td>' +
-          '<td>' + esc(l.codigo) + '</td>' +
-          '<td>' + esc(l.descripcion) + '</td>' +
-          '<td>' + esc(l.codigo_fabrica) + '</td>' +
-          '<td>' + esc(l.unidad_ref) + '</td>' +
-          '<td><strong>' + l.cantidad + '</strong></td></tr>';
-      }).join('');
-      tbody.querySelectorAll('.cons-del').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          var idx = parseInt(btn.getAttribute('data-idx'), 10);
-          if (isNaN(idx)) return;
-          if (!window.confirm('¿Quitar esta línea del consolidado?')) return;
-          lineas.splice(idx, 1);
-          saveLocal();
-          renderTabla();
-        });
-      });
-      if (res) res.textContent = lineas.length + ' línea(s) · ' + sorted.length + ' en vista detalle';
-    } else {
-      var prevLineas = lineas;
-      lineas = data;
-      var rows = consolidadoRows();
-      lineas = prevLineas;
-      thead.innerHTML = '<tr><th>Tipo</th><th>Código</th><th>Descripción</th><th>Fábrica</th><th>Und.ref</th><th>Factor</th><th>Total und</th><th>Cajas≈</th></tr>';
-      var html = '';
-      var lastTipo = '';
-      rows.forEach(function (r) {
-        if (r.tipo !== lastTipo) {
-          html += '<tr><td colspan="8" class="cons-sec-title">' +
-            (r.tipo === 'FRIOS' ? '❄️ FRÍOS' : '📦 SECOS') + '</td></tr>';
-          lastTipo = r.tipo;
-        }
-        var fac = r.factor > 1 ? r.factor : 1;
-        var cajas = fac > 1 ? (Math.floor(r.cantidad / fac) + ' cj + ' + (r.cantidad % fac) + ' und') : '—';
-        var tipCls = r.tipo === 'FRIOS' ? 'badge-frio' : 'badge-seco';
-        html += '<tr><td class="' + tipCls + '">' + esc(r.tipo) + '</td><td>' + esc(r.codigo) +
-          '</td><td>' + esc(r.descripcion) + '</td><td>' + esc(r.codigo_fabrica) +
-          '</td><td>' + esc(r.unidad_ref) + '</td><td>' + fac +
-          '</td><td><strong>' + r.cantidad + '</strong></td><td>' + cajas + '</td></tr>';
-      });
-      tbody.innerHTML = html || '<tr><td colspan="8">Sin líneas. Agrega productos arriba.</td></tr>';
-      if (res) {
-        var frios = rows.filter(function (r) { return r.tipo === 'FRIOS'; }).length;
-        var secos = rows.filter(function (r) { return r.tipo === 'SECOS'; }).length;
-        res.textContent = rows.length + ' productos consolidados · Fríos ' + frios + ' · Secos ' + secos;
+      var listaCam = Object.keys(camiones).sort();
+      var hit = listaCam.find(function (c) { return c.toUpperCase() === camSel.toUpperCase(); }) ||
+        listaCam.find(function (c) { return c.toUpperCase().indexOf(camSel.toUpperCase()) >= 0; });
+      var fecha = ($('consFecha') || {}).value || new Date().toISOString().slice(0, 10);
+      if (hit) {
+        hojas = [{ camion: hit, items: camiones[hit], titulo: 'CONSOLIDADO DE CARGA - MERCADERÍA - GENERAL (R)', fecha: fecha }];
       }
     }
+    if (!hojas || !hojas.length) {
+      hojas = armarHojasDocumento('multi');
+    }
+    if (!hojas || !hojas.length) {
+      inner.innerHTML = '<p class="cons-preview-empty">No hay hojas para mostrar.</p>';
+      if (res) res.textContent = lineas.length + ' línea(s)';
+      return;
+    }
+
+    inner.innerHTML = htmlDocumento(hojas) || '<p class="cons-preview-empty">Sin contenido.</p>';
+
+    var nItems = 0;
+    hojas.forEach(function (h) { nItems += (h.items && h.items.length) || 0; });
+    if (res) {
+      res.textContent = lineas.length + ' línea(s) · vista previa: ' +
+        (camSel ? camSel : (hojas.length + ' hoja(s)')) +
+        ' · ' + nItems + ' ítem(s) en documento';
+    }
   }
+
 
   function lineaCategoria(desc, lineaCat) {
     var s = String(lineaCat || desc || '').toUpperCase()
@@ -1016,7 +1002,8 @@
     });
     if ($('consCamion')) $('consCamion').addEventListener('change', function () {
       var v = $('consCamion').value;
-      if ($('consFiltroCamion') && v) $('consFiltroCamion').value = v;
+      if ($('consFiltroCamion')) $('consFiltroCamion').value = v || '';
+      renderTabla();
     });
     ['consFecha'].forEach(function (id) {
       var el = $(id);
