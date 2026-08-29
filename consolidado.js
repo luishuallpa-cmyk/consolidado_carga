@@ -612,8 +612,8 @@
     hojas.forEach(function (h) { nItems += (h.items && h.items.length) || 0; });
     var camSel = String(($('consCamion') || {}).value || '').trim();
     if (res) {
-      res.textContent = lineas.length + ' línea(s) · vista previa: ' +
-        (camSel ? camSel : (hojas.length + ' hoja(s)')) +
+      res.textContent = lineas.length + ' línea(s) · ' + hojas.length + ' hoja(s) a imprimir' +
+        (camSel ? (' · filtro: ' + camSel) : ' · todos los camiones') +
         ' · ' + nItems + ' ítem(s)';
     }
 
@@ -778,24 +778,35 @@
       return h;
     }
 
-    var piePag = (numHoja !== '' && totalHojas !== '')
-      ? (' · Hoja ' + numHoja + ' de ' + totalHojas)
+    // Título fijo en todas las hojas + numeración visible (Hoja X de N)
+    var tituloFijo = 'CONSOLIDADO DE CARGA - MERCADERÍA - GENERAL (R)';
+    var textoHoja = (numHoja !== '' && totalHojas !== '')
+      ? ('Hoja ' + numHoja + ' de ' + totalHojas)
+      : '';
+    var badgeHoja = textoHoja
+      ? ('<span style="background:#0f172a;color:#fff;padding:3px 10px;border-radius:999px;font-weight:700;margin-left:8px;font-size:9pt;">' + textoHoja + '</span>')
       : '';
 
     return '<div class="print-page" style="page-break-after:always;font-family:Segoe UI,Arial,sans-serif;color:#0f172a;background:#fff;">' +
       '<div style="display:flex;align-items:center;gap:14px;border-bottom:3px solid #1d4ed8;padding-bottom:10px;margin-bottom:12px;">' +
         '<img src="' + LOGO_URL + '" alt="IEM" style="height:48px;width:auto;object-fit:contain;" onerror="this.style.display=\'none\'" />' +
         '<div style="flex:1;">' +
-          '<div style="font-size:14pt;font-weight:800;color:#1e3a5f;letter-spacing:.02em;">' + esc(titulo) + '</div>' +
-          '<div style="margin-top:4px;font-size:10pt;">' +
+          '<div style="font-size:13pt;font-weight:800;color:#1e3a5f;letter-spacing:.02em;">' + esc(tituloFijo) + badgeHoja + '</div>' +
+          '<div style="margin-top:6px;font-size:10pt;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">' +
             '<span style="background:#1d4ed8;color:#fff;padding:3px 10px;border-radius:999px;font-weight:700;">' + esc(camion || '') + '</span>' +
-            ' &nbsp; <strong>Fecha:</strong> ' + esc(fecha || '') + esc(piePag) +
+            '<span><strong>Fecha:</strong> ' + esc(fecha || '') + '</span>' +
+            (titulo && String(titulo) !== tituloFijo
+              ? ('<span style="color:#64748b;font-size:9pt;">' + esc(titulo) + '</span>')
+              : '') +
           '</div>' +
         '</div>' +
       '</div>' +
       tablaBloque('❄ FRÍOS', '#0e7490', frios) +
       tablaBloque('📦 SECOS', '#b45309', secos) +
-      '<div style="margin-top:14px;padding-top:8px;border-top:2px solid #1d4ed8;font-size:9pt;color:#475569;">IEM Group · Consolidado de carga' + esc(piePag) + '</div>' +
+      '<div style="margin-top:14px;padding-top:8px;border-top:2px solid #1d4ed8;font-size:9pt;color:#475569;display:flex;justify-content:space-between;gap:8px;">' +
+        '<span>IEM Group · Consolidado de carga · ' + esc(camion || '') + '</span>' +
+        '<span style="font-weight:700;">' + esc(textoHoja) + '</span>' +
+      '</div>' +
       '</div>';
   }
 
@@ -862,8 +873,16 @@
   function htmlDocumento(hojas) {
     if (!hojas || !hojas.length) return '';
     var total = hojas.length;
+    var TITULO = 'CONSOLIDADO DE CARGA - MERCADERÍA - GENERAL (R)';
     return hojas.map(function (h, i) {
-      return buildPrintHtml(h.titulo, h.camion, h.items, h.fecha, { numHoja: i + 1, totalHojas: total });
+      // Mismo título en todas las hojas; numeración Hoja X de N
+      return buildPrintHtml(
+        TITULO,
+        h.camion,
+        h.items,
+        h.fecha,
+        { numHoja: i + 1, totalHojas: total, subtitulo: h.titulo }
+      );
     }).join('');
   }
 
