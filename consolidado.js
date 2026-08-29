@@ -805,20 +805,44 @@
     var hojas = armarHojasDocumento(modo);
     if (!hojas) return;
     var doc = htmlDocumento(hojas);
+    // Vista previa embebida (sin ventanas nuevas) — respeta colores/logo
     var inline = $('consPreviewInline');
     if (inline) {
       inline.innerHTML = doc;
       inline.scrollTop = 0;
+      try { inline.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (eS) {}
     }
-    if (soloInline) return;
-    var body = $('consPreviewBody');
-    var modal = $('consPreviewModal');
-    if (body && modal) {
-      body.innerHTML = doc;
-      modal.classList.add('open');
-      modal.setAttribute('aria-hidden', 'false');
-      try { modal.scrollTop = 0; } catch (e) {}
+    // Modal a pantalla completa en la misma pestaña (opcional)
+    if (!soloInline) {
+      var body = $('consPreviewBody');
+      var modal = $('consPreviewModal');
+      if (body && modal) {
+        body.innerHTML = doc;
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+      }
     }
+  }
+
+  function imprimirDesdeHtml(htmlBody) {
+    // Iframe oculto: imprime sin abrir otra pestaña
+    var id = 'consPrintFrame';
+    var old = document.getElementById(id);
+    if (old) old.remove();
+    var iframe = document.createElement('iframe');
+    iframe.id = id;
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    document.body.appendChild(iframe);
+    var doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open();
+    doc.write('<!DOCTYPE html><html><head><title>Imprimir consolidado</title>' +
+      '<style>@page{margin:12mm} body{margin:0;background:#fff;}' +
+      '@media print{.print-page{page-break-after:always}.print-page:last-child{page-break-after:auto}}</style></head><body>' +
+      htmlBody + '</body></html>');
+    doc.close();
+    setTimeout(function () {
+      try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch (e) {}
+    }, 300);
   }
 
   function imprimir(modo) {
@@ -829,16 +853,7 @@
     var hojas = armarHojasDocumento(modo);
     if (!hojas) return;
     var htmlBody = htmlDocumento(hojas);
-    var w = window.open('', '_blank');
-    if (!w) {
-      alert('Permite ventanas emergentes para imprimir.');
-      return;
-    }
-    w.document.write('<!DOCTYPE html><html><head><title>Imprimir consolidado</title>' +
-      '<style>@media print { .print-page { page-break-after: always; } .print-page:last-child { page-break-after: auto; } body{margin:10mm;} }' +
-      'body{margin:12mm;background:#f1f5f9;}</style></head><body>' + htmlBody +
-      '<script>window.onload=function(){setTimeout(function(){window.print();},250);}</script></body></html>');
-    w.document.close();
+    imprimirDesdeHtml(htmlBody);
   }
 
   function exportExcel(modo) {
@@ -997,12 +1012,10 @@
     });
     if ($('btnConsPreviewPrint')) $('btnConsPreviewPrint').addEventListener('click', function () {
       var body = $('consPreviewBody');
-      if (!body || !body.innerHTML) { alert('Abre primero la vista previa.'); return; }
-      var w = window.open('', '_blank');
-      if (!w) return;
-      w.document.write('<!DOCTYPE html><html><head><title>Imprimir</title><style>@media print{.print-page{page-break-after:always}.print-page:last-child{page-break-after:auto}}body{margin:10mm}</style></head><body>' +
-        body.innerHTML + '<script>window.onload=function(){window.print();}</script></body></html>');
-      w.document.close();
+      var inline = $('consPreviewInline');
+      var html = (body && body.innerHTML) || (inline && inline.innerHTML) || '';
+      if (!html) { alert('Abre primero la vista previa.'); return; }
+      imprimirDesdeHtml(html);
     });
     if ($('btnConsDescontar')) $('btnConsDescontar').addEventListener('click', function () { descontarInventario(); });
     if ($('btnConsTema')) $('btnConsTema').addEventListener('click', function () {
