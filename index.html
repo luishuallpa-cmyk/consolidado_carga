@@ -80,12 +80,12 @@
         </select>
       </div>
       <div class="cons-toolbar-main">
-        <button type="button" class="btn btn-primary" id="btnConsPrintUno">🖨 Imprimir un camión</button>
-        <button type="button" class="btn btn-primary" id="btnConsPrintMulti">🖨 Imprimir todos</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsExcelTodos">📥 Excel</button>
+        <button type="button" class="btn btn-primary" id="btnConsPrintUno" title="Abre vista previa del camión seleccionado (diseño de documento). Desde ahí puedes imprimir o guardar PDF.">🖨 Vista previa / Imprimir un camión</button>
+        <button type="button" class="btn btn-primary" id="btnConsPrintMulti" title="Abre vista previa de todos los camiones + consolidado general.">🖨 Vista previa / Imprimir todos</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btnConsExcelTodos" title="Descarga un archivo Excel (.xlsx) con una hoja por camión + consolidado. Útil para archivar o usar en otros sistemas; no es la impresión con diseño.">📥 Exportar Excel</button>
       </div>
       <p class="cons-status" id="consResumen">0 líneas</p>
-      <p class="cons-hint">Elige un camión en la lista para «Imprimir un camión». «Imprimir todos» genera una hoja por cada camión + consolidado general, listo para imprimir con el diseño de documento.</p>
+      <p class="cons-hint">Los botones «Vista previa / Imprimir» abren una ventana con las hojas en diseño de documento (logo IEM, categorías, tablas) — similar a Acrobat. Revisa, luego usa «Imprimir» o Ctrl+P (puedes elegir «Guardar como PDF»). En el diálogo de impresión activa «Gráficos de fondo» si no se ven los colores. El botón «Exportar Excel» solo descarga un .xlsx de datos (sin ese diseño visual); sirve para archivar o sistemas externos.</p>
 
       <div class="cons-table-wrap" id="consTableWrap" style="margin-top:.75rem">
         <table class="cons-table" id="consTabla">
