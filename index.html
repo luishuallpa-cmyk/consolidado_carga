@@ -29,21 +29,6 @@
     .cons-table th { position:sticky; top:0; background:var(--c-card); z-index:1; }
     .badge-frio { color:#38bdf8; font-weight:700; }
     .badge-seco { color:#fbbf24; font-weight:700; }
-    .cons-preview-modal {
-      display:none; position:fixed; inset:0; z-index:9999;
-      background:rgba(15,23,42,.8); padding:1rem; overflow:auto;
-    }
-    .cons-preview-modal.open { display:block; }
-    .cons-preview-bar {
-      position:sticky; top:0; z-index:2; display:flex; flex-wrap:wrap; gap:.5rem;
-      align-items:center; justify-content:space-between;
-      background:#0f172a; color:#fff; padding:.75rem 1rem; border-radius:10px; margin-bottom:1rem;
-    }
-    #consPreviewInline {
-      margin-top:.75rem; background:#e2e8f0; border-radius:12px; padding:1rem;
-      max-height:55vh; overflow:auto; color:#0f172a;
-    }
-    #consPreviewInline:empty { display:none; }
     .cons-hint { font-size:.8rem; color:var(--c-muted); margin:0 0 .5rem; }
   </style>
 </head>
@@ -83,7 +68,7 @@
       <div class="cons-actions" style="margin-bottom:.5rem">
         <label style="font-size:.85rem;color:var(--c-muted)">Camión:</label>
         <select id="consCamion" style="min-width:160px">
-          <option value="">— Todos / elegir —</option>
+          <option value="">— Elegir camión —</option>
         </select>
         <select id="consFiltroCamion" hidden>
           <option value="">Todos los camiones</option>
@@ -95,37 +80,22 @@
         </select>
       </div>
       <div class="cons-toolbar-main">
-        <button type="button" class="btn btn-primary" id="btnConsPreviewUno">👁 Vista previa un camión</button>
-        <button type="button" class="btn btn-primary" id="btnConsPreviewTodos">👁 Vista previa todos (lote)</button>
-        <button type="button" class="btn btn-outline" id="btnConsPrintUno">🖨 Imprimir un camión</button>
-        <button type="button" class="btn btn-outline" id="btnConsPrintMulti">🖨 Imprimir todos</button>
+        <button type="button" class="btn btn-primary" id="btnConsPrintUno">🖨 Imprimir un camión</button>
+        <button type="button" class="btn btn-primary" id="btnConsPrintMulti">🖨 Imprimir todos</button>
         <button type="button" class="btn btn-outline btn-sm" id="btnConsExcelTodos">📥 Excel</button>
       </div>
       <p class="cons-status" id="consResumen">0 líneas</p>
-
-      <!-- Vista previa embebida (donde estaba la tabla) -->
-      <div id="consPreviewInline" aria-live="polite"></div>
+      <p class="cons-hint">Elige un camión en la lista para «Imprimir un camión». «Imprimir todos» genera una hoja por cada camión + consolidado general, listo para imprimir con el diseño de documento.</p>
 
       <div class="cons-table-wrap" id="consTableWrap" style="margin-top:.75rem">
         <table class="cons-table" id="consTabla">
           <thead id="consThead"></thead>
           <tbody id="consTbody">
-            <tr><td colspan="8" style="color:var(--c-muted);padding:1rem">Importa el Excel para ver el detalle aquí y la vista previa arriba.</td></tr>
+            <tr><td colspan="8" style="color:var(--c-muted);padding:1rem">Importa el Excel para ver el detalle aquí.</td></tr>
           </tbody>
         </table>
       </div>
     </div>
-  </div>
-
-  <div class="cons-preview-modal" id="consPreviewModal" aria-hidden="true">
-    <div class="cons-preview-bar">
-      <strong>Vista previa · listo para imprimir</strong>
-      <span style="display:flex;gap:.4rem;flex-wrap:wrap">
-        <button type="button" class="btn btn-primary btn-sm" id="btnConsPreviewPrint">🖨 Imprimir</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsPreviewClose" style="color:#fff;border-color:#64748b">Cerrar</button>
-      </span>
-    </div>
-    <div id="consPreviewBody"></div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

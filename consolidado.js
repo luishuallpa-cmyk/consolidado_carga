@@ -98,7 +98,7 @@
       var esFiltro = id === 'consFiltroCamion';
       sel.innerHTML = esFiltro
         ? "<option value=''>Todos los camiones</option>"
-        : "<option value=''>— Selecciona camión —</option>";
+        : "<option value=''>— Elegir camión —</option>";
       lista.forEach(function (c) {
         var opt = document.createElement('option');
         opt.value = c;
@@ -293,8 +293,6 @@
     saveLocal();
     vista = 'detalle';
     renderTabla();
-    // Vista previa automática del lote para ver antes de imprimir
-    try { mostrarVistaPrevia('multi', true); } catch (ePrev) {}
     var camiones = {};
     lineas.forEach(function (l) { camiones[l.camion] = true; });
     var msg = 'Importados ' + lineas.length + ' líneas de ' + files.length + ' archivo(s) · ' +
@@ -762,7 +760,7 @@
     if (modo === 'uno') {
       var filtro = String(($('consCamion') || {}).value || ($('consFiltroCamion') || {}).value || '').trim();
       if (!filtro) {
-        alert('Selecciona un camión en «Camión / ruta» o «Solo camión».');
+        alert('Selecciona un camión en la lista «Camión».');
         return null;
       }
       var hit = listaCam.find(function (c) { return c.toUpperCase() === filtro.toUpperCase(); }) ||
@@ -795,33 +793,6 @@
     return hojas.map(function (h, i) {
       return buildPrintHtml(h.titulo, h.camion, h.items, h.fecha, { numHoja: i + 1, totalHojas: total });
     }).join('');
-  }
-
-  function mostrarVistaPrevia(modo, soloInline) {
-    if (!lineas.length) {
-      alert('No hay líneas. Importa el Excel de carga primero.');
-      return;
-    }
-    var hojas = armarHojasDocumento(modo);
-    if (!hojas) return;
-    var doc = htmlDocumento(hojas);
-    // Vista previa embebida (sin ventanas nuevas) — respeta colores/logo
-    var inline = $('consPreviewInline');
-    if (inline) {
-      inline.innerHTML = doc;
-      inline.scrollTop = 0;
-      try { inline.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (eS) {}
-    }
-    // Modal a pantalla completa en la misma pestaña (opcional)
-    if (!soloInline) {
-      var body = $('consPreviewBody');
-      var modal = $('consPreviewModal');
-      if (body && modal) {
-        body.innerHTML = doc;
-        modal.classList.add('open');
-        modal.setAttribute('aria-hidden', 'false');
-      }
-    }
   }
 
   function imprimirDesdeHtml(htmlBody) {
@@ -1004,19 +975,6 @@
     if ($('btnConsExcel')) $('btnConsExcel').addEventListener('click', function () { exportExcel('consolidado'); });
     if ($('btnConsPrintMulti')) $('btnConsPrintMulti').addEventListener('click', function () { imprimir('multi'); });
     if ($('btnConsPrintUno')) $('btnConsPrintUno').addEventListener('click', function () { imprimir('uno'); });
-    if ($('btnConsPreviewTodos')) $('btnConsPreviewTodos').addEventListener('click', function () { mostrarVistaPrevia('multi'); });
-    if ($('btnConsPreviewUno')) $('btnConsPreviewUno').addEventListener('click', function () { mostrarVistaPrevia('uno'); });
-    if ($('btnConsPreviewClose')) $('btnConsPreviewClose').addEventListener('click', function () {
-      var modal = $('consPreviewModal');
-      if (modal) { modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true'); }
-    });
-    if ($('btnConsPreviewPrint')) $('btnConsPreviewPrint').addEventListener('click', function () {
-      var body = $('consPreviewBody');
-      var inline = $('consPreviewInline');
-      var html = (body && body.innerHTML) || (inline && inline.innerHTML) || '';
-      if (!html) { alert('Abre primero la vista previa.'); return; }
-      imprimirDesdeHtml(html);
-    });
     if ($('btnConsDescontar')) $('btnConsDescontar').addEventListener('click', function () { descontarInventario(); });
     if ($('btnConsTema')) $('btnConsTema').addEventListener('click', function () {
       document.body.classList.toggle('light-theme');
