@@ -111,25 +111,21 @@
   }
 
   function enriquecerDesdeCatalogo() {
-    if (!catalogo.length || !lineas.length) return;
-    var byCod = Object.create(null);
-    catalogo.forEach(function (p) { byCod[p.codigo] = p; });
+    if (!lineas.length) return;
     lineas.forEach(function (l) {
-      var cod = String(l.codigo || '').trim();
-      if (/^\d{1,3}$/.test(cod)) cod = ('0000' + cod).slice(-4);
-      l.codigo = cod;
-      var cat = byCod[cod];
+      l.codigo = normCodigo4(l.codigo) || String(l.codigo || '').trim();
+      var cat = productoPorCodigo(l.codigo);
       if (cat) {
-        l.tipo = cat.tipo || clasificarProducto(cat);
+        l.tipo = tipoPorCodigo(l.codigo, cat.descripcion, cat.linea);
         l.linea = cat.linea || l.linea || '';
-        l.descripcion = cat.descripcion || l.descripcion;
+        if (cat.descripcion) l.descripcion = cat.descripcion;
         l.codigo_fabrica = cat.codigo_fabrica || l.codigo_fabrica || '';
         if (cat.factor > 1 && !(l.factor > 1)) l.factor = cat.factor;
         if (!l.unidad_ref && cat.unidad_ref) l.unidad_ref = cat.unidad_ref;
       } else {
-        l.tipo = clasificarProducto({ descripcion: l.descripcion, linea: l.linea, tipo: l.tipo });
+        l.tipo = tipoPorCodigo(l.codigo, l.descripcion, l.linea);
       }
-      l._categoria = lineaCategoria(l.descripcion, l.linea);
+      l._categoria = categoriaDeItem(l);
     });
   }
 
@@ -541,7 +537,7 @@
       var cons = consolidadoRows();
       cons.forEach(function (r) {
         var cat = catalogo.find(function (p) { return p.codigo === r.codigo; });
-        r._categoria = lineaCategoria(r.descripcion, cat && (cat.linea || cat.marca));
+        r._categoria = categoriaDeItem(r);
         if (!r.tipo && cat) r.tipo = cat.tipo;
         if (r.peso == null) r.peso = 0;
       });
@@ -625,28 +621,98 @@
   }
 
 
-  function lineaCategoria(desc, lineaCat) {
-    // Prioridad: línea del catálogo Supabase (ej. "LECHES FRESCAS: ENTERO (A)" → "LECHES FRESCAS")
-    var lin = String(lineaCat || '').trim();
-    if (lin) {
-      var part = lin.split(':')[0].trim();
-      if (part.length >= 2) return part.toUpperCase();
-      return lin.toUpperCase();
+  /** Normaliza código a 4 dígitos cuando aplica (Uniflex / IEM). */
+  function normCodigo4(cod) {
+    var s = String(cod == null ? '' : cod).trim();
+    if (!s) return '';
+    if (/^\d+$/.test(s) && s.length <= 4) return ('0000' + s).slice(-4);
+    return s;
+  }
+
+  /** Busca producto en catálogo Supabase por código (4 dígitos y variantes). */
+  function productoPorCodigo(cod) {
+    if (!catalogo || !catalogo.length) return null;
+    var s = String(cod == null ? '' : cod).trim();
+    if (!s) return null;
+    var c4 = normCodigo4(s);
+    var sin0 = s.replace(/^0+/, '') || s;
+    for (var i = 0; i < catalogo.length; i++) {
+      var p = catalogo[i];
+      var pc = String(p.codigo || '').trim();
+      if (!pc) continue;
+      if (pc === s || pc === c4 || pc === sin0) return p;
+      if (normCodigo4(pc) === c4) return p;
+      if (pc.replace(/^0+/, '') === sin0) return p;
     }
+    return null;
+  }
+
+  /**
+   * Categoría de línea para el documento.
+   * 1) Catálogo por CÓDIGO → campo linea de Supabase (más preciso)
+   * 2) Si no hay línea útil → heurística por nombre/descripción
+   */
+  function lineaCategoria(desc, lineaCat, codigo) {
+    var lin = String(lineaCat || '').trim();
+
+    // Si tenemos código, preferir siempre la línea del catálogo Supabase
+    if (codigo) {
+      var prod = productoPorCodigo(codigo);
+      if (prod) {
+        if (prod.linea) lin = String(prod.linea).trim();
+        if (!desc && prod.descripcion) desc = prod.descripcion;
+      }
+    }
+
+    if (lin) {
+      var upper = lin.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      // Líneas genéricas poco útiles → caer a nombre
+      if (!/^(NUEVO|NUEVOS|OTRO|OTROS|NULL|UNDEFINED|S\/?L|SIN\s*LINEA)$/i.test(upper.trim())) {
+        var part = lin.split(':')[0].trim();
+        if (part.length >= 2) return part.toUpperCase();
+        return lin.toUpperCase();
+      }
+    }
+
+    // Fallback por nombre / descripción
     var s = String(desc || '').toUpperCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (/YOGUR|YOG\.|GRIEGO|PROBIOT|BIO DEFENSA/.test(s)) return 'YOGURES';
     if (/QUESO|EDAM|MOZZARELL|PARMESANO|CHEDDAR|CREAM CHEESE/.test(s)) return 'QUESOS';
     if (/MANTEQUILL/.test(s)) return 'MANTEQUILLAS';
     if (/MARGARINA/.test(s)) return 'MARGARINAS';
-    if (/SALCHICH|JAMON|JAMÓN|CHORIZ|HOT DOG|CHICHARRON|EMBUTID|MORTADEL|JAMONADA|TOCIN/.test(s)) return 'EMBUTIDOS';
-    if (/MANJAR|FUDGE|DULCE DE LECHE|SIROPE|BASE DE HELADO/.test(s)) return 'MANJARES / DULCES';
-    if (/EVAPORAD|BOLSITARRO|PRACTITARRO|NUTRILAC|MEZCLA LACT/.test(s)) return 'EVAPORADAS';
+    if (/SALCHICH|JAMON|JAMONADA|CHORIZ|HOT DOG|CHICHARRON|EMBUTID|MORTADEL|TOCIN/.test(s)) return 'EMBUTIDOS';
+    if (/GELATINA|YOPI/.test(s)) return 'GELATINAS';
+    if (/SIROPE|MAPLE/.test(s)) return 'SIROPES / BASES';
+    if (/BASE DE HELADO|HELADO/.test(s)) return 'BASE DE HELADO';
+    if (/MANJAR|FUDGE|DULCE DE LECHE/.test(s)) return 'MANJARES / DULCES';
+    if (/EVAPORAD|BOLSITARRO|PRACTITARRO|NUTRILAC|MEZCLA LACT|CHIQUITARRO/.test(s)) return 'EVAPORADAS';
     if (/ALMENDRA|SOYA|COCO|VEGETAL/.test(s)) return 'BEBIDAS VEGETALES';
-    if (/WATTS|NARANJADA|REFRESCO/.test(s)) return 'BEBIDAS';
+    if (/WATTS|NARANJADA|REFRESCO|NECTAR/.test(s)) return 'BEBIDAS';
     if (/LECHE|UHT|LACTEA|LACTEO/.test(s)) return 'LECHES';
     if (/CREMA DE LECHE|CREMA DE/.test(s)) return 'CREMAS DE LECHE';
     return 'OTROS';
+  }
+
+  /** Fríos / Secos: siempre por código → catálogo Supabase (tipo_almacen). */
+  function tipoPorCodigo(cod, desc, linea) {
+    var prod = productoPorCodigo(cod);
+    if (prod) {
+      var t = String(prod.tipo || prod.tipo_almacen || '').toUpperCase();
+      if (t.indexOf('FRIO') >= 0) return 'FRIOS';
+      if (t.indexOf('SECO') >= 0) return 'SECOS';
+      return clasificarProducto(prod);
+    }
+    return clasificarProducto({ descripcion: desc, linea: linea, codigo: cod });
+  }
+
+  /** Categoría final de un ítem de carga (recalcula, no usa OTROS viejo). */
+  function categoriaDeItem(it) {
+    if (!it) return 'OTROS';
+    var prod = productoPorCodigo(it.codigo);
+    var lin = (prod && prod.linea) || it.linea || '';
+    var desc = (prod && prod.descripcion) || it.descripcion || '';
+    return lineaCategoria(desc, lin, it.codigo);
   }
 
 
@@ -668,12 +734,14 @@
     aoa.push([]);
     aoa.push(['ITEM', 'Código', 'Producto / Descripción', 'Unidad', 'Cajas', 'Unidades Sueltas', 'Tipo', 'Peso / Obs']);
 
-    // Separar Fríos y Secos
+    // Separar Fríos y Secos por código → Supabase
     var frios = [];
     var secos = [];
     items.forEach(function (it) {
-      var t = String(it.tipo || '').toUpperCase();
-      if (t.indexOf('FRIO') >= 0) frios.push(it);
+      it.tipo = tipoPorCodigo(it.codigo, it.descripcion, it.linea);
+      it._categoria = categoriaDeItem(it);
+      var tt = String(it.tipo || '').toUpperCase();
+      if (tt.indexOf('FRIO') >= 0) frios.push(it);
       else secos.push(it);
     });
 
@@ -683,7 +751,7 @@
       var grupos = Object.create(null);
       var orden = [];
       lista.forEach(function (it) {
-        var cat = it._categoria || lineaCategoria(it.descripcion, it.linea);
+        var cat = categoriaDeItem(it);
         if (!grupos[cat]) { grupos[cat] = []; orden.push(cat); }
         grupos[cat].push(it);
       });
@@ -735,6 +803,10 @@
     opts = opts || {};
     var numHoja = opts.numHoja != null ? opts.numHoja : '';
     var totalHojas = opts.totalHojas != null ? opts.totalHojas : '';
+    items.forEach(function (it) {
+      it.tipo = tipoPorCodigo(it.codigo, it.descripcion, it.linea);
+      it._categoria = categoriaDeItem(it);
+    });
     var frios = items.filter(function (it) { return String(it.tipo || '').toUpperCase().indexOf('FRIO') >= 0; });
     var secos = items.filter(function (it) { return String(it.tipo || '').toUpperCase().indexOf('FRIO') < 0; });
 
@@ -743,7 +815,7 @@
       var grupos = Object.create(null);
       var orden = [];
       lista.forEach(function (it) {
-        var cat = it._categoria || lineaCategoria(it.descripcion, it.linea);
+        var cat = categoriaDeItem(it);
         if (!grupos[cat]) { grupos[cat] = []; orden.push(cat); }
         grupos[cat].push(it);
       });
@@ -811,18 +883,8 @@
   }
 
   function enriquecerLineas() {
-    lineas.forEach(function (l) {
-      var cat = catalogo.find(function (p) { return p.codigo === l.codigo; });
-      if (cat) {
-        if (!l.tipo) l.tipo = cat.tipo;
-        if (cat.factor > 1 && !(l.factor > 1)) l.factor = cat.factor;
-        if (!l.unidad_ref) l.unidad_ref = cat.unidad_ref;
-        l._categoria = lineaCategoria(l.descripcion, cat.linea || cat.marca);
-      } else {
-        l._categoria = lineaCategoria(l.descripcion);
-        if (!l.tipo) l.tipo = 'SECOS';
-      }
-    });
+    // Siempre por código → Supabase (línea + Fríos/Secos)
+    enriquecerDesdeCatalogo();
   }
 
   function armarHojasDocumento(modo) {
@@ -855,7 +917,7 @@
       var cons = consolidadoRows();
       cons.forEach(function (r) {
         var cat = catalogo.find(function (p) { return p.codigo === r.codigo; });
-        r._categoria = lineaCategoria(r.descripcion, cat && (cat.linea || cat.marca));
+        r._categoria = categoriaDeItem(r);
         if (!r.tipo && cat) r.tipo = cat.tipo;
         if (r.peso == null) r.peso = 0;
       });
@@ -993,7 +1055,8 @@
       var consItems = consolidadoRows();
       consItems.forEach(function (r) {
         var cat = catalogo.find(function (p) { return p.codigo === r.codigo; });
-        r._categoria = (r.tipo === 'FRIOS' ? 'FRÍOS · ' : 'SECOS · ') + lineaCategoria(r.descripcion, cat && cat.linea);
+        r.tipo = tipoPorCodigo(r.codigo, r.descripcion, cat && cat.linea);
+        r._categoria = (r.tipo === 'FRIOS' ? 'FRÍOS · ' : 'SECOS · ') + categoriaDeItem(r);
       });
       var wsC = hojaFormatoCamion('CONSOLIDADO GENERAL', consItems, fecha);
       XLSX.utils.book_append_sheet(wb, wsC, 'Consolidado');
