@@ -5,55 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>IEM · Consolidado de carga</title>
   <link rel="icon" href="favicon-32.png" sizes="32x32" />
-  <link rel="stylesheet" href="style.css" />
   <style>
-    :root { --c-bg:#0f172a; --c-card:#1e293b; --c-border:#334155; --c-text:#f1f5f9; --c-muted:#94a3b8; --c-pri:#3B6EA5; --c-ok:#16a34a; --c-warn:#f59e0b; --c-bad:#dc2626; }
+    :root { --c-bg:#0f172a; --c-card:#1e293b; --c-border:#334155; --c-text:#f1f5f9; --c-muted:#94a3b8; --c-pri:#3B6EA5; --c-ok:#16a34a; --c-bad:#dc2626; }
     body.cons-page { margin:0; background:var(--c-bg); color:var(--c-text); font-family:system-ui,-apple-system,sans-serif; min-height:100vh; }
     body.cons-page.light-theme { --c-bg:#f8fafc; --c-card:#fff; --c-border:#e2e8f0; --c-text:#0f172a; --c-muted:#64748b; }
     .cons-wrap { max-width:1100px; margin:0 auto; padding:1rem 1rem 4rem; }
     .cons-head { display:flex; flex-wrap:wrap; gap:.75rem; align-items:center; justify-content:space-between; margin-bottom:1rem; }
     .cons-head h1 { margin:0; font-size:1.25rem; }
     .cons-card { background:var(--c-card); border:1px solid var(--c-border); border-radius:14px; padding:1rem; margin-bottom:1rem; }
-    .cons-grid { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
-    @media(max-width:720px){ .cons-grid{ grid-template-columns:1fr; } }
-    .cons-card label { display:block; font-size:.75rem; color:var(--c-muted); margin-bottom:.25rem; }
-    .cons-card input, .cons-card select { width:100%; padding:.55rem .65rem; border-radius:10px; border:1px solid var(--c-border); background:var(--c-bg); color:var(--c-text); font:inherit; box-sizing:border-box; }
-    .cons-actions { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.75rem; }
-    .cons-actions .btn { cursor:pointer; }
-    .cons-tabs { display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:.75rem; }
-    .cons-tab { padding:.45rem .85rem; border-radius:999px; border:1px solid var(--c-border); background:transparent; color:var(--c-text); cursor:pointer; font:inherit; font-size:.85rem; }
-    .cons-tab.active { background:var(--c-pri); border-color:var(--c-pri); color:#fff; }
-    .cons-table-wrap { overflow:auto; max-height:55vh; border:1px solid var(--c-border); border-radius:12px; }
+    .cons-actions { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
+    .cons-status { font-size:.85rem; color:var(--c-muted); margin:.35rem 0; }
+    .btn { cursor:pointer; border-radius:10px; border:1px solid var(--c-border); background:transparent; color:var(--c-text); padding:.5rem .85rem; font:inherit; font-size:.88rem; }
+    .btn-primary { background:var(--c-pri); border-color:var(--c-pri); color:#fff; font-weight:600; }
+    .btn-outline { background:transparent; }
+    .btn-sm { padding:.4rem .7rem; font-size:.82rem; }
+    .btn-danger { border-color:var(--c-bad); color:#fecaca; }
+    select { padding:.45rem .65rem; border-radius:10px; border:1px solid var(--c-border); background:var(--c-bg); color:var(--c-text); font:inherit; }
+    .cons-fecha-badge { display:inline-flex; align-items:center; gap:.4rem; padding:.35rem .75rem; border-radius:999px; background:rgba(59,110,165,.2); border:1px solid var(--c-pri); font-size:.85rem; font-weight:600; }
+    .cons-toolbar-main { display:flex; flex-wrap:wrap; gap:.5rem; margin:.5rem 0; }
+    .cons-table-wrap { overflow:auto; max-height:42vh; border:1px solid var(--c-border); border-radius:12px; }
     .cons-table { width:100%; border-collapse:collapse; font-size:.82rem; }
-    .cons-table th, .cons-table td { padding:.45rem .55rem; border-bottom:1px solid var(--c-border); text-align:left; white-space:nowrap; }
+    .cons-table th, .cons-table td { padding:.4rem .5rem; border-bottom:1px solid var(--c-border); text-align:left; white-space:nowrap; }
     .cons-table th { position:sticky; top:0; background:var(--c-card); z-index:1; }
-    .cons-table tr:hover td { background:rgba(59,110,165,.08); }
     .badge-frio { color:#38bdf8; font-weight:700; }
     .badge-seco { color:#fbbf24; font-weight:700; }
-    .cons-status { font-size:.85rem; color:var(--c-muted); margin:.35rem 0; }
-    .cons-search-results { max-height:180px; overflow:auto; border:1px solid var(--c-border); border-radius:10px; margin-top:.35rem; display:none; }
-    .cons-search-results.open { display:block; }
-    .cons-search-item { padding:.5rem .65rem; cursor:pointer; border-bottom:1px solid var(--c-border); }
-    .cons-search-item:hover { background:rgba(59,110,165,.15); }
-    .cons-del { background:transparent; border:none; color:var(--c-bad); cursor:pointer; font-size:1rem; }
-    .cons-sec-title { font-size:.95rem; font-weight:700; margin:1rem 0 .4rem; padding:.35rem .5rem; border-radius:8px; background:rgba(59,110,165,.12); }
-  
     .cons-preview-modal {
       display:none; position:fixed; inset:0; z-index:9999;
-      background:rgba(15,23,42,.72); padding:1rem; overflow:auto;
+      background:rgba(15,23,42,.8); padding:1rem; overflow:auto;
     }
     .cons-preview-modal.open { display:block; }
-    .cons-preview-sheet {
-      max-width:900px; margin:0 auto 1.25rem; background:#fff; color:#0f172a;
-      border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,.35); padding:1.25rem 1.5rem;
-    }
     .cons-preview-bar {
       position:sticky; top:0; z-index:2; display:flex; flex-wrap:wrap; gap:.5rem;
       align-items:center; justify-content:space-between;
-      background:#0f172a; color:#fff; padding:.65rem 1rem; border-radius:10px; margin-bottom:1rem;
+      background:#0f172a; color:#fff; padding:.75rem 1rem; border-radius:10px; margin-bottom:1rem;
     }
-    .cons-toolbar-main { display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:.5rem; }
-    .cons-toolbar-main .btn { font-weight:600; }
+    #consPreviewInline {
+      margin-top:.75rem; background:#e2e8f0; border-radius:12px; padding:1rem;
+      max-height:55vh; overflow:auto; color:#0f172a;
+    }
+    #consPreviewInline:empty { display:none; }
+    .cons-hint { font-size:.8rem; color:var(--c-muted); margin:0 0 .5rem; }
   </style>
 </head>
 <body class="cons-page">
@@ -61,96 +52,66 @@
     <div class="cons-head">
       <div>
         <h1>📦 Consolidado de carga</h1>
-        <div class="cons-status" id="consStatus">Cargando catálogo…</div>
+        <div class="cons-status" id="consStatus">Cargando…</div>
       </div>
       <div class="cons-actions">
-        <a class="btn btn-outline btn-sm" href="index.html">← Inventario</a>
+        <span class="cons-fecha-badge" title="Fecha del reparto (día siguiente; si domingo → lunes)">📅 Reparto: <span id="consFechaLabel">—</span></span>
+        <input type="hidden" id="consFecha" />
         <button type="button" class="btn btn-outline btn-sm" id="btnConsTema">Tema</button>
       </div>
     </div>
 
     <div class="cons-card">
-      <h3 style="margin:0 0 .65rem;font-size:1rem;">📥 Importar como el macro (Excel consolidado de carga)</h3>
-      <p class="cons-status" style="margin-top:0">Sube el Excel diario (columnas <code>EntidadNombre</code>, <code>ConsolidadoComprobanteProductoCodigo</code>, <code>Cantidad</code>…) o elige una <strong>carpeta</strong> y se generan todos los consolidados.</p>
-      <div class="cons-actions" style="margin-top:.35rem">
-        <label class="btn btn-primary btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:.35rem">
-          📄 Excel / varios archivos
+      <h3 style="margin:0 0 .4rem;font-size:1rem;">1. Cargar Excel del día</h3>
+      <p class="cons-hint">Elige el archivo o la carpeta de consolidados. Si usas carpeta, al volver a esta pestaña se vuelve a leer automáticamente.</p>
+      <div class="cons-actions">
+        <label class="btn btn-primary btn-sm" style="cursor:pointer">
+          📄 Elegir Excel
           <input type="file" id="consFile" accept=".xlsx,.xls,.xlsm,.csv" multiple hidden />
         </label>
-        <label class="btn btn-outline btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:.35rem">
-          📁 Carpeta completa
+        <label class="btn btn-outline btn-sm" style="cursor:pointer">
+          📁 Elegir carpeta
           <input type="file" id="consFolder" webkitdirectory directory multiple hidden />
         </label>
+        <button type="button" class="btn btn-outline btn-sm" id="btnConsRefrescarCarpeta" title="Volver a leer la última carpeta/archivos">↻ Actualizar datos</button>
       </div>
-      <p class="cons-status" id="consImportStatus">Sin archivo importado.</p>
-      <hr style="border:none;border-top:1px solid var(--c-border);margin:1rem 0" />
-      <h3 style="margin:0 0 .65rem;font-size:.95rem;color:var(--c-muted)">O agregar línea a mano</h3>
-      <div class="cons-grid">
-        <div>
-          <label>Fecha de carga</label>
-          <input type="date" id="consFecha" />
-        </div>
-        <div>
-          <label>Camión / ruta (elegir de la lista)</label>
-          <select id="consCamion">
-            <option value="">— Selecciona camión —</option>
-          </select>
-          <p class="cons-status" style="margin:.25rem 0 0;font-size:.75rem">Se llena al importar el Excel. También puedes filtrar la vista por camión.</p>
-        </div>
-        <div style="grid-column:1/-1">
-          <label>Buscar producto (código o nombre)</label>
-          <input type="search" id="consBuscar" placeholder="Código Uniflex o descripción…" autocomplete="off" />
-          <div class="cons-search-results" id="consResultados"></div>
-        </div>
-        <div>
-          <label>Producto elegido</label>
-          <input type="text" id="consProdLabel" readonly placeholder="Ninguno" />
-          <input type="hidden" id="consProdCodigo" />
-        </div>
-        <div>
-          <label>Cantidad (unidades)</label>
-          <input type="number" id="consCant" min="1" step="1" value="1" />
-        </div>
-      </div>
-      <div class="cons-actions">
-        <button type="button" class="btn btn-primary btn-sm" id="btnConsAgregar">＋ Agregar al consolidado</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsLimpiar">Vaciar lista</button>
-      </div>
-    </div>
-
-    <div class="cons-tabs" role="tablist">
-      <button type="button" class="cons-tab active" data-cons-vista="detalle">Detalle por camión</button>
-      <button type="button" class="cons-tab" data-cons-vista="consolidado">Consolidado (Fríos / Secos)</button>
-    </div>
-    <div class="cons-actions" style="margin-bottom:.65rem">
-      <label style="font-size:.8rem;color:var(--c-muted)">Ver tipo:</label>
-      <select id="consFiltroTipo" style="max-width:140px;padding:.4rem .55rem;border-radius:8px;border:1px solid var(--c-border);background:var(--c-card);color:var(--c-text)">
-        <option value="">Todos</option>
-        <option value="FRIOS">❄ Fríos</option>
-        <option value="SECOS">📦 Secos</option>
-      </select>
-      <label style="font-size:.8rem;color:var(--c-muted);margin-left:.5rem">Solo camión:</label>
-      <select id="consFiltroCamion" style="max-width:180px;padding:.4rem .55rem;border-radius:8px;border:1px solid var(--c-border);background:var(--c-card);color:var(--c-text)">
-        <option value="">Todos los camiones</option>
-      </select>
+      <p class="cons-status" id="consImportStatus">Sin archivo. Fecha de reparto se calcula sola (mañana; domingo → lunes).</p>
     </div>
 
     <div class="cons-card">
+      <h3 style="margin:0 0 .4rem;font-size:1rem;">2. Generar e imprimir</h3>
+      <div class="cons-actions" style="margin-bottom:.5rem">
+        <label style="font-size:.85rem;color:var(--c-muted)">Camión:</label>
+        <select id="consCamion" style="min-width:160px">
+          <option value="">— Todos / elegir —</option>
+        </select>
+        <select id="consFiltroCamion" hidden>
+          <option value="">Todos los camiones</option>
+        </select>
+        <select id="consFiltroTipo" hidden>
+          <option value="">Todos</option>
+          <option value="FRIOS">Fríos</option>
+          <option value="SECOS">Secos</option>
+        </select>
+      </div>
       <div class="cons-toolbar-main">
-        <button type="button" class="btn btn-primary btn-sm" id="btnConsPreviewTodos" title="Vista previa tipo PDF de todos los camiones">👁 Vista previa todos</button>
-        <button type="button" class="btn btn-primary btn-sm" id="btnConsPreviewUno" title="Vista previa del camión seleccionado">👁 Vista previa un camión</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsPrintMulti">🖨 Imprimir todos</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsPrintUno">🖨 Imprimir uno</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsExcelTodos">📥 Excel todos</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsExcelUno">📥 Excel uno</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsExcel">📥 Excel consolidado</button>
-        <button type="button" class="btn btn-danger btn-sm" id="btnConsDescontar" title="Opcional: resta stock en Supabase">⬇ Descontar stock</button>
+        <button type="button" class="btn btn-primary" id="btnConsPreviewUno">👁 Vista previa un camión</button>
+        <button type="button" class="btn btn-primary" id="btnConsPreviewTodos">👁 Vista previa todos (lote)</button>
+        <button type="button" class="btn btn-outline" id="btnConsPrintUno">🖨 Imprimir un camión</button>
+        <button type="button" class="btn btn-outline" id="btnConsPrintMulti">🖨 Imprimir todos</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btnConsExcelTodos">📥 Excel</button>
       </div>
       <p class="cons-status" id="consResumen">0 líneas</p>
-      <div class="cons-table-wrap">
+
+      <!-- Vista previa embebida (donde estaba la tabla) -->
+      <div id="consPreviewInline" aria-live="polite"></div>
+
+      <div class="cons-table-wrap" id="consTableWrap" style="margin-top:.75rem">
         <table class="cons-table" id="consTabla">
           <thead id="consThead"></thead>
-          <tbody id="consTbody"></tbody>
+          <tbody id="consTbody">
+            <tr><td colspan="8" style="color:var(--c-muted);padding:1rem">Importa el Excel para ver el detalle aquí y la vista previa arriba.</td></tr>
+          </tbody>
         </table>
       </div>
     </div>
@@ -158,14 +119,15 @@
 
   <div class="cons-preview-modal" id="consPreviewModal" aria-hidden="true">
     <div class="cons-preview-bar">
-      <strong>Vista previa del documento</strong>
+      <strong>Vista previa · listo para imprimir</strong>
       <span style="display:flex;gap:.4rem;flex-wrap:wrap">
-        <button type="button" class="btn btn-primary btn-sm" id="btnConsPreviewPrint">🖨 Imprimir esta vista</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btnConsPreviewPrint">🖨 Imprimir</button>
         <button type="button" class="btn btn-outline btn-sm" id="btnConsPreviewClose" style="color:#fff;border-color:#64748b">Cerrar</button>
       </span>
     </div>
     <div id="consPreviewBody"></div>
   </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>

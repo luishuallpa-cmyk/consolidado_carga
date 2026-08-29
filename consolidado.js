@@ -14,8 +14,35 @@
   var productoSel = null;
   var vista = 'detalle'; // detalle | consolidado
   var STORAGE_KEY = 'iem_consolidado_carga_v1';
+  var lastImportFiles = null; // FileList o array para re-leer carpeta
 
   function $(id) { return document.getElementById(id); }
+
+  /** Día siguiente; si cae domingo → lunes */
+  function fechaRepartoSiguiente(desde) {
+    var d = desde ? new Date(desde) : new Date();
+    d.setHours(12, 0, 0, 0);
+    d.setDate(d.getDate() + 1);
+    // 0 = domingo
+    if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+  function aplicarFechaReparto() {
+    var iso = fechaRepartoSiguiente();
+    var el = $('consFecha');
+    if (el) el.value = iso;
+    var lab = $('consFechaLabel');
+    if (lab) {
+      try {
+        var p = iso.split('-');
+        lab.textContent = p[2] + '/' + p[1] + '/' + p[0];
+      } catch (e) { lab.textContent = iso; }
+    }
+    return iso;
+  }
   function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -236,6 +263,7 @@
       toast('No hay Excel en la selección.');
       return;
     }
+    lastImportFiles = files;
     var st = $('consImportStatus');
     if (st) st.textContent = 'Leyendo ' + files.length + ' archivo(s)…';
     var todas = [];
@@ -261,9 +289,12 @@
     lineas = todas;
     enriquecerDesdeCatalogo();
     actualizarSelectCamiones();
+    aplicarFechaReparto();
     saveLocal();
-    vista = 'consolidado';
+    vista = 'detalle';
     renderTabla();
+    // Vista previa automática del lote para ver antes de imprimir
+    try { mostrarVistaPrevia('multi', true); } catch (ePrev) {}
     var camiones = {};
     lineas.forEach(function (l) { camiones[l.camion] = true; });
     var msg = 'Importados ' + lineas.length + ' líneas de ' + files.length + ' archivo(s) · ' +
@@ -766,28 +797,28 @@
     }).join('');
   }
 
-  function mostrarVistaPrevia(modo) {
+  function mostrarVistaPrevia(modo, soloInline) {
     if (!lineas.length) {
       alert('No hay líneas. Importa el Excel de carga primero.');
       return;
     }
     var hojas = armarHojasDocumento(modo);
     if (!hojas) return;
+    var doc = htmlDocumento(hojas);
+    var inline = $('consPreviewInline');
+    if (inline) {
+      inline.innerHTML = doc;
+      inline.scrollTop = 0;
+    }
+    if (soloInline) return;
     var body = $('consPreviewBody');
     var modal = $('consPreviewModal');
-    if (!body || !modal) {
-      // fallback ventana
-      var w = window.open('', '_blank');
-      if (w) {
-        w.document.write('<!DOCTYPE html><html><head><title>Vista previa</title></head><body style="margin:12mm;">' + htmlDocumento(hojas) + '</body></html>');
-        w.document.close();
-      }
-      return;
+    if (body && modal) {
+      body.innerHTML = doc;
+      modal.classList.add('open');
+      modal.setAttribute('aria-hidden', 'false');
+      try { modal.scrollTop = 0; } catch (e) {}
     }
-    body.innerHTML = htmlDocumento(hojas);
-    modal.classList.add('open');
-    modal.setAttribute('aria-hidden', 'false');
-    try { modal.scrollTop = 0; } catch (e) {}
   }
 
   function imprimir(modo) {
@@ -927,9 +958,7 @@
   }
 
   function bind() {
-    if ($('consFecha') && !$('consFecha').value) {
-      $('consFecha').value = new Date().toISOString().slice(0, 10);
-    }
+    aplicarFechaReparto();
     var buscarEl = $('consBuscar');
     if (buscarEl) {
       buscarEl.addEventListener('input', renderBusqueda);
@@ -941,7 +970,7 @@
       if (e.target && (e.target.id === 'consBuscar' || box.contains(e.target))) return;
       box.classList.remove('open');
     });
-    if ($('btnConsAgregar')) $('btnConsAgregar').addEventListener('click', agregarLinea);
+    if ($('btnConsAgregar')) try { $('btnConsAgregar').addEventListener('click', agregarLinea); } catch (eA) {}
     if ($('btnConsLimpiar')) $('btnConsLimpiar').addEventListener('click', function () {
       if (!lineas.length) return;
       if (!window.confirm('¿Vaciar todo el consolidado de hoy?')) return;
@@ -1002,6 +1031,21 @@
     if (f2) f2.addEventListener('change', function () {
       if (f2.files && f2.files.length) importarArchivos(f2.files);
       f2.value = '';
+    });
+    var btnRef = $('btnConsRefrescarCarpeta');
+    if (btnRef) btnRef.addEventListener('click', function () {
+      if (lastImportFiles && lastImportFiles.length) {
+        importarArchivos(lastImportFiles);
+      } else {
+        alert('Primero elige un Excel o una carpeta.');
+      }
+    });
+    // Al volver a la pestaña, re-leer última importación (carpeta del día)
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState !== 'visible') return;
+      if (lastImportFiles && lastImportFiles.length) {
+        try { importarArchivos(lastImportFiles); } catch (eR) {}
+      }
     });
   }
 
