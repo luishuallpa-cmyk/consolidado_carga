@@ -605,11 +605,16 @@
     } catch (eS) {}
 
     var nItems = 0;
-    hojas.forEach(function (h) { nItems += (h.items && h.items.length) || 0; });
+    var nPaginas = 0;
+    hojas.forEach(function (h) {
+      var n = (h.items && h.items.length) || 0;
+      nItems += n;
+      nPaginas += Math.max(1, Math.ceil(n / (typeof ITEMS_POR_HOJA === 'number' ? ITEMS_POR_HOJA : 28)));
+    });
     var camSel = String(($('consCamion') || {}).value || '').trim();
     if (res) {
-      res.textContent = lineas.length + ' línea(s) · ' + hojas.length + ' hoja(s) a imprimir' +
-        (camSel ? (' · filtro: ' + camSel) : ' · todos los camiones') +
+      res.textContent = lineas.length + ' línea(s) · ' + nPaginas + ' hoja(s) a imprimir' +
+        (camSel ? (' · ' + camSel) : ' · todos los camiones') +
         ' · ' + nItems + ' ítem(s)';
     }
 
@@ -799,58 +804,101 @@
     return (Math.round(n * 100) / 100).toFixed(2);
   }
 
-  function buildPrintHtml(titulo, camion, items, fecha, opts) {
-    opts = opts || {};
-    var numHoja = opts.numHoja != null ? opts.numHoja : '';
-    var totalHojas = opts.totalHojas != null ? opts.totalHojas : '';
-    items.forEach(function (it) {
-      it.tipo = tipoPorCodigo(it.codigo, it.descripcion, it.linea);
-      it._categoria = categoriaDeItem(it);
-    });
-    var frios = items.filter(function (it) { return String(it.tipo || '').toUpperCase().indexOf('FRIO') >= 0; });
-    var secos = items.filter(function (it) { return String(it.tipo || '').toUpperCase().indexOf('FRIO') < 0; });
+  /** Máx. ítems de producto por hoja A4 (aprox. cabecera + grupos). */
+  var ITEMS_POR_HOJA = 28;
 
-    function tablaBloque(nombre, colorBg, lista) {
-      if (!lista.length) return '';
+  /**
+   * Ordena ítems: FRIOS luego SECOS, y dentro por categoría/código.
+   * Devuelve lista plana con marcadores de grupo.
+   */
+  function ordenarItemsParaHojas(items) {
+    var list = (items || []).map(function (it) {
+      var copy = Object.assign({}, it);
+      copy.tipo = tipoPorCodigo(copy.codigo, copy.descripcion, copy.linea);
+      copy._categoria = categoriaDeItem(copy);
+      return copy;
+    });
+    var frios = list.filter(function (it) { return String(it.tipo || '').toUpperCase().indexOf('FRIO') >= 0; });
+    var secos = list.filter(function (it) { return String(it.tipo || '').toUpperCase().indexOf('FRIO') < 0; });
+
+    function porCat(arr) {
       var grupos = Object.create(null);
       var orden = [];
-      lista.forEach(function (it) {
-        var cat = categoriaDeItem(it);
+      arr.forEach(function (it) {
+        var cat = it._categoria || 'OTROS';
         if (!grupos[cat]) { grupos[cat] = []; orden.push(cat); }
         grupos[cat].push(it);
       });
       orden.sort();
-      var h = '<div class="blk-tipo" style="margin:14px 0 6px;padding:8px 12px;border-radius:8px;background:' + colorBg + ';color:#fff;font-weight:800;font-size:12pt;letter-spacing:.04em;">' + esc(nombre) + '</div>';
-      var n = 0;
       orden.forEach(function (cat) {
-        h += '<div style="font-weight:700;margin:10px 0 4px;font-size:10pt;background:#1e3a5f;color:#fff;padding:5px 10px;border-radius:6px;">' + esc(cat) + '</div>';
-        h += '<table style="width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:8px;"><thead><tr style="background:#e2e8f0;">' +
-          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:40px;">ITEM</th>' +
-          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Código</th>' +
-          '<th style="border:1px solid #94a3b8;padding:5px 4px;">Producto / Descripción</th>' +
-          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:60px;">Unidad</th>' +
-          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:48px;">Cajas</th>' +
-          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Und. sueltas</th>' +
-          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Peso</th></tr></thead><tbody>';
-        grupos[cat].forEach(function (it) {
-          n++;
-          var fac = Number(it.factor) > 1 ? Number(it.factor) : 1;
-          var cu = cantACajasUnd(it.cantidad, fac);
-          var pesoTxt = fmtPeso(it.peso);
-          h += '<tr><td style="border:1px solid #cbd5e1;padding:4px;text-align:center;">' + n +
-            '</td><td style="border:1px solid #cbd5e1;padding:4px;font-family:monospace;font-weight:600;">' + esc(it.codigo) +
-            '</td><td style="border:1px solid #cbd5e1;padding:4px;">' + esc(it.descripcion) +
-            '</td><td style="border:1px solid #cbd5e1;padding:4px;">' + esc(it.unidad_ref || '') +
-            '</td><td style="border:1px solid #cbd5e1;padding:4px;text-align:center;">' + (cu.cajas === '' ? '' : cu.cajas) +
-            '</td><td style="border:1px solid #cbd5e1;padding:4px;text-align:center;">' + cu.sueltas +
-            '</td><td style="border:1px solid #cbd5e1;padding:4px;text-align:right;">' + pesoTxt + '</td></tr>';
+        grupos[cat].sort(function (a, b) {
+          return String(a.codigo).localeCompare(String(b.codigo), 'es', { numeric: true });
         });
-        h += '</tbody></table>';
       });
-      return h;
+      return { orden: orden, grupos: grupos };
     }
 
-    // Título fijo en todas las hojas + numeración visible (Hoja X de N)
+    return { frios: porCat(frios), secos: porCat(secos), friosList: frios, secosList: secos };
+  }
+
+  /** Parte los ítems de un camión en páginas de ~ITEMS_POR_HOJA productos. */
+  function partirItemsEnPaginas(items) {
+    var ord = ordenarItemsParaHojas(items);
+    // secuencia de filas de producto en orden visual
+    var seq = [];
+    function pushTipo(tipoKey, bloque) {
+      bloque.orden.forEach(function (cat) {
+        bloque.grupos[cat].forEach(function (it) {
+          seq.push({ tipoKey: tipoKey, categoria: cat, item: it });
+        });
+      });
+    }
+    pushTipo('FRIOS', ord.frios);
+    pushTipo('SECOS', ord.secos);
+
+    if (!seq.length) return [{ rows: [], pesoTotalCamion: 0 }];
+
+    var pesoTotal = 0;
+    seq.forEach(function (r) { pesoTotal += Number(r.item.peso) || 0; });
+
+    var pages = [];
+    for (var i = 0; i < seq.length; i += ITEMS_POR_HOJA) {
+      pages.push({
+        rows: seq.slice(i, i + ITEMS_POR_HOJA),
+        pesoTotalCamion: pesoTotal,
+        esUltima: false
+      });
+    }
+    if (pages.length) pages[pages.length - 1].esUltima = true;
+    return pages;
+  }
+
+  function fmtPesoNum(n) {
+    var x = Number(n) || 0;
+    if (!x) return '0.00';
+    return (Math.round(x * 100) / 100).toFixed(2);
+  }
+
+  function buildPrintHtml(titulo, camion, items, fecha, opts) {
+    opts = opts || {};
+    var numHoja = opts.numHoja != null ? opts.numHoja : '';
+    var totalHojas = opts.totalHojas != null ? opts.totalHojas : '';
+    var pageRows = opts.pageRows || null; // si viene partido
+    var pesoTotalCamion = opts.pesoTotalCamion != null ? opts.pesoTotalCamion : null;
+    var esUltimaHojaCamion = opts.esUltimaHojaCamion !== false;
+    var itemOffset = opts.itemOffset || 0; // numeración ITEM continua
+
+    // Si no hay pageRows, usar todos los ítems (compat)
+    if (!pageRows) {
+      var pages = partirItemsEnPaginas(items);
+      pageRows = pages[0] ? pages[0].rows : [];
+      pesoTotalCamion = pages[0] ? pages[0].pesoTotalCamion : 0;
+      esUltimaHojaCamion = true;
+      // recalcular peso
+      pesoTotalCamion = 0;
+      (items || []).forEach(function (it) { pesoTotalCamion += Number(it.peso) || 0; });
+    }
+
     var tituloFijo = 'CONSOLIDADO DE CARGA - MERCADERÍA - GENERAL (R)';
     var textoHoja = (numHoja !== '' && totalHojas !== '')
       ? ('Hoja ' + numHoja + ' de ' + totalHojas)
@@ -858,6 +906,133 @@
     var badgeHoja = textoHoja
       ? ('<span style="background:#0f172a;color:#fff;padding:3px 10px;border-radius:999px;font-weight:700;margin-left:8px;font-size:9pt;">' + textoHoja + '</span>')
       : '';
+
+    // Reconstruir HTML por tipo/categoría a partir de pageRows
+    function renderDesdeRows(rows) {
+      if (!rows || !rows.length) {
+        return '<p style="color:#64748b;font-size:10pt;">Sin ítems en esta hoja.</p>';
+      }
+      var html = '';
+      var lastTipo = '';
+      var lastCat = '';
+      var n = itemOffset;
+      var pesoHoja = 0;
+
+      rows.forEach(function (r) {
+        if (r.tipoKey !== lastTipo) {
+          lastTipo = r.tipoKey;
+          lastCat = '';
+          var nom = lastTipo === 'FRIOS' ? '❄ FRÍOS' : '📦 SECOS';
+          var bg = lastTipo === 'FRIOS' ? '#0e7490' : '#b45309';
+          html += '<div class="blk-tipo" style="margin:14px 0 6px;padding:8px 12px;border-radius:8px;background:' + bg + ';color:#fff;font-weight:800;font-size:12pt;letter-spacing:.04em;">' + nom + '</div>';
+        }
+        if (r.categoria !== lastCat) {
+          lastCat = r.categoria;
+          html += '<div style="font-weight:700;margin:10px 0 4px;font-size:10pt;background:#1e3a5f;color:#fff;padding:5px 10px;border-radius:6px;">' + esc(lastCat) + '</div>';
+          html += '<table style="width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:8px;"><thead><tr style="background:#e2e8f0;">' +
+            '<th style="border:1px solid #94a3b8;padding:5px 4px;width:40px;">ITEM</th>' +
+            '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Código</th>' +
+            '<th style="border:1px solid #94a3b8;padding:5px 4px;">Producto / Descripción</th>' +
+            '<th style="border:1px solid #94a3b8;padding:5px 4px;width:60px;">Unidad</th>' +
+            '<th style="border:1px solid #94a3b8;padding:5px 4px;width:48px;">Cajas</th>' +
+            '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Und. sueltas</th>' +
+            '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Peso</th></tr></thead><tbody>';
+        }
+        n++;
+        var it = r.item;
+        var fac = Number(it.factor) > 1 ? Number(it.factor) : 1;
+        var cu = cantACajasUnd(it.cantidad, fac);
+        var pw = Number(it.peso) || 0;
+        pesoHoja += pw;
+        html += '<tr><td style="border:1px solid #cbd5e1;padding:4px;text-align:center;">' + n +
+          '</td><td style="border:1px solid #cbd5e1;padding:4px;font-family:monospace;font-weight:600;">' + esc(it.codigo) +
+          '</td><td style="border:1px solid #cbd5e1;padding:4px;">' + esc(it.descripcion) +
+          '</td><td style="border:1px solid #cbd5e1;padding:4px;">' + esc(it.unidad_ref || '') +
+          '</td><td style="border:1px solid #cbd5e1;padding:4px;text-align:center;">' + (cu.cajas === '' ? '' : cu.cajas) +
+          '</td><td style="border:1px solid #cbd5e1;padding:4px;text-align:center;">' + cu.sueltas +
+          '</td><td style="border:1px solid #cbd5e1;padding:4px;text-align:right;">' + fmtPeso(it.peso) + '</td></tr>';
+
+        // cerrar tabla si el siguiente cambia de categoría o es el último
+      });
+
+      // Cerrar tablas abiertas: re-render más simple cerrando al cambiar cat
+      // Arriba abrimos table al cambiar cat pero no cerramos. Rehacer con cierre correcto:
+      return null; // placeholder - usamos renderDesdeRowsV2
+    }
+
+    function renderDesdeRowsV2(rows) {
+      if (!rows || !rows.length) {
+        return '<p style="color:#64748b;font-size:10pt;">Sin ítems en esta hoja.</p>';
+      }
+      var html = '';
+      var lastTipo = '';
+      var lastCat = '';
+      var tableOpen = false;
+      var n = itemOffset;
+      var pesoHoja = 0;
+
+      function closeTable() {
+        if (tableOpen) { html += '</tbody></table>'; tableOpen = false; }
+      }
+
+      rows.forEach(function (r) {
+        if (r.tipoKey !== lastTipo) {
+          closeTable();
+          lastTipo = r.tipoKey;
+          lastCat = '';
+          var nom = lastTipo === 'FRIOS' ? '❄ FRÍOS' : '📦 SECOS';
+          var bg = lastTipo === 'FRIOS' ? '#0e7490' : '#b45309';
+          html += '<div class="blk-tipo" style="margin:14px 0 6px;padding:8px 12px;border-radius:8px;background:' + bg + ';color:#fff;font-weight:800;font-size:12pt;">' + nom + '</div>';
+        }
+        if (r.categoria !== lastCat) {
+          closeTable();
+          lastCat = r.categoria;
+          html += '<div style="font-weight:700;margin:10px 0 4px;font-size:10pt;background:#1e3a5f;color:#fff;padding:5px 10px;border-radius:6px;">' + esc(lastCat) + '</div>';
+          html += '<table style="width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:8px;"><thead><tr style="background:#e2e8f0;">' +
+            '<th style="border:1px solid #94a3b8;padding:5px 4px;width:40px;">ITEM</th>' +
+            '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Código</th>' +
+            '<th style="border:1px solid #94a3b8;padding:5px 4px;">Producto / Descripción</th>' +
+            '<th style="border:1px solid #94a3b8;padding:5px 4px;width:60px;">Unidad</th>' +
+            '<th style="border:1px solid #94a3b8;padding:5px 4px;width:48px;">Cajas</th>' +
+            '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Und. sueltas</th>' +
+            '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Peso</th></tr></thead><tbody>';
+          tableOpen = true;
+        }
+        n++;
+        var it = r.item;
+        var fac = Number(it.factor) > 1 ? Number(it.factor) : 1;
+        var cu = cantACajasUnd(it.cantidad, fac);
+        var pw = Number(it.peso) || 0;
+        pesoHoja += pw;
+        html += '<tr><td style="border:1px solid #cbd5e1;padding:4px;text-align:center;">' + n +
+          '</td><td style="border:1px solid #cbd5e1;padding:4px;font-family:monospace;font-weight:600;">' + esc(it.codigo) +
+          '</td><td style="border:1px solid #cbd5e1;padding:4px;">' + esc(it.descripcion) +
+          '</td><td style="border:1px solid #cbd5e1;padding:4px;">' + esc(it.unidad_ref || '') +
+          '</td><td style="border:1px solid #cbd5e1;padding:4px;text-align:center;">' + (cu.cajas === '' ? '' : cu.cajas) +
+          '</td><td style="border:1px solid #cbd5e1;padding:4px;text-align:center;">' + cu.sueltas +
+          '</td><td style="border:1px solid #cbd5e1;padding:4px;text-align:right;">' + fmtPeso(it.peso) + '</td></tr>';
+      });
+      closeTable();
+      return { html: html, pesoHoja: pesoHoja, lastItem: n };
+    }
+
+    var body = renderDesdeRowsV2(pageRows);
+    // Si no hay pageRows y items directo (fallback vacío)
+    if ((!pageRows || !pageRows.length) && items && items.length && !opts.pageRows) {
+      var pg0 = partirItemsEnPaginas(items)[0];
+      body = renderDesdeRowsV2(pg0 ? pg0.rows : []);
+      pesoTotalCamion = pg0 ? pg0.pesoTotalCamion : 0;
+    }
+
+    var bloqueTotal = '';
+    if (esUltimaHojaCamion) {
+      bloqueTotal = '<div style="margin-top:12px;padding:10px 12px;background:#f1f5f9;border:2px solid #1d4ed8;border-radius:8px;display:flex;justify-content:space-between;align-items:center;font-size:11pt;">' +
+        '<strong>TOTAL PESO ' + esc(camion || '') + '</strong>' +
+        '<strong style="font-size:13pt;color:#1e3a5f;">' + fmtPesoNum(pesoTotalCamion) + ' kg</strong>' +
+        '</div>';
+    } else {
+      bloqueTotal = '<div style="margin-top:10px;font-size:9pt;color:#64748b;text-align:right;">… continúa en la hoja siguiente</div>';
+    }
 
     return '<div class="print-page" style="page-break-after:always;font-family:Segoe UI,Arial,sans-serif;color:#0f172a;background:#fff;">' +
       '<div style="display:flex;align-items:center;gap:14px;border-bottom:3px solid #1d4ed8;padding-bottom:10px;margin-bottom:12px;">' +
@@ -867,20 +1042,18 @@
           '<div style="margin-top:6px;font-size:10pt;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">' +
             '<span style="background:#1d4ed8;color:#fff;padding:3px 10px;border-radius:999px;font-weight:700;">' + esc(camion || '') + '</span>' +
             '<span><strong>Fecha:</strong> ' + esc(fecha || '') + '</span>' +
-            (titulo && String(titulo) !== tituloFijo
-              ? ('<span style="color:#64748b;font-size:9pt;">' + esc(titulo) + '</span>')
-              : '') +
           '</div>' +
         '</div>' +
       '</div>' +
-      tablaBloque('❄ FRÍOS', '#0e7490', frios) +
-      tablaBloque('📦 SECOS', '#b45309', secos) +
+      body.html +
+      bloqueTotal +
       '<div style="margin-top:14px;padding-top:8px;border-top:2px solid #1d4ed8;font-size:9pt;color:#475569;display:flex;justify-content:space-between;gap:8px;">' +
         '<span>IEM Group · Consolidado de carga · ' + esc(camion || '') + '</span>' +
         '<span style="font-weight:700;">' + esc(textoHoja) + '</span>' +
       '</div>' +
       '</div>';
   }
+
 
   function enriquecerLineas() {
     // Siempre por código → Supabase (línea + Fríos/Secos)
@@ -934,17 +1107,36 @@
 
   function htmlDocumento(hojas) {
     if (!hojas || !hojas.length) return '';
-    var total = hojas.length;
     var TITULO = 'CONSOLIDADO DE CARGA - MERCADERÍA - GENERAL (R)';
-    return hojas.map(function (h, i) {
-      // Mismo título en todas las hojas; numeración Hoja X de N
-      return buildPrintHtml(
-        TITULO,
-        h.camion,
-        h.items,
-        h.fecha,
-        { numHoja: i + 1, totalHojas: total, subtitulo: h.titulo }
-      );
+    // Expandir cada camión en N hojas físicas según cantidad de ítems
+    var paginas = [];
+    hojas.forEach(function (h) {
+      var parts = partirItemsEnPaginas(h.items || []);
+      var offset = 0;
+      parts.forEach(function (part, pi) {
+        paginas.push({
+          camion: h.camion,
+          fecha: h.fecha,
+          titulo: h.titulo,
+          pageRows: part.rows,
+          pesoTotalCamion: part.pesoTotalCamion,
+          esUltimaHojaCamion: !!part.esUltima,
+          itemOffset: offset
+        });
+        offset += (part.rows && part.rows.length) || 0;
+      });
+    });
+    if (!paginas.length) return '';
+    var total = paginas.length;
+    return paginas.map(function (pg, i) {
+      return buildPrintHtml(TITULO, pg.camion, [], pg.fecha, {
+        numHoja: i + 1,
+        totalHojas: total,
+        pageRows: pg.pageRows,
+        pesoTotalCamion: pg.pesoTotalCamion,
+        esUltimaHojaCamion: pg.esUltimaHojaCamion,
+        itemOffset: pg.itemOffset
+      });
     }).join('');
   }
 
