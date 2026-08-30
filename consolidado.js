@@ -1356,6 +1356,19 @@
   }
 
   function bind() {
+    // Atajos del menú inicial (por si bindRuta falla)
+    try {
+      var c1 = $('chooserCarga');
+      var c2 = $('chooserRuta');
+      var ct = $('chooserTema');
+      if (c1) c1.onclick = function () { abrirModulo('carga'); };
+      if (c2) c2.onclick = function () { abrirModulo('ruta'); };
+      if (ct) ct.onclick = function () {
+        document.body.classList.toggle('light-theme');
+        try { localStorage.setItem('iem_cons_theme', document.body.classList.contains('light-theme') ? 'light' : 'dark'); } catch (e) {}
+      };
+    } catch (eCh) { console.warn(eCh); }
+
     aplicarFechaReparto();
     var buscarEl = $('consBuscar');
     if (buscarEl) {
@@ -1393,6 +1406,7 @@
     if ($('btnConsDescontar')) $('btnConsDescontar').addEventListener('click', function () { descontarInventario(); });
     if ($('btnConsTema')) $('btnConsTema').addEventListener('click', function () {
       document.body.classList.toggle('light-theme');
+      try { localStorage.setItem('iem_cons_theme', document.body.classList.contains('light-theme') ? 'light' : 'dark'); } catch (e) {}
     });
     if ($('consFiltroTipo')) $('consFiltroTipo').addEventListener('change', renderTabla);
     if ($('consFiltroCamion')) $('consFiltroCamion').addEventListener('change', function () {
@@ -1952,15 +1966,20 @@
   }
 
   async function main() {
-    bind();
-    loadLocal();
-    renderTabla();
-    var ok = await initSupabase();
-    if (!ok) return;
+    try { bind(); } catch (eB) { console.error('bind', eB); }
+    try { bindRuta(); } catch (eR) { console.error('bindRuta', eR); }
+    try { mostrarChooser(); } catch (eC) {}
+    try { loadLocal(); } catch (eL) {}
+    // No generar PDF hasta entrar al módulo carga
     try {
-      await cargarCatalogo();
-    } catch (e) {
-      status('Error catálogo: ' + (e.message || e));
+      var ok = await initSupabase();
+      if (ok) {
+        try { await cargarCatalogo(); } catch (e) {
+          status('Error catálogo: ' + (e.message || e));
+        }
+      }
+    } catch (eS) {
+      console.warn('supabase', eS);
     }
   }
 
