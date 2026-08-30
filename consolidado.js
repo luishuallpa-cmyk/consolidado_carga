@@ -1361,9 +1361,17 @@
       var c1 = $('chooserCarga');
       var c2 = $('chooserRuta');
       var ct = $('chooserTema');
-      if (c1) c1.onclick = function () { abrirModulo('carga'); };
-      if (c2) c2.onclick = function () { abrirModulo('ruta'); };
-      if (ct) ct.onclick = function () {
+      console.log('[IEM] bind chooser els', { carga: !!c1, ruta: !!c2, tema: !!ct });
+      if (c1) c1.onclick = function (ev) {
+        console.log('[IEM] click Consolidado de carga', ev && ev.type);
+        abrirModulo('carga');
+      };
+      if (c2) c2.onclick = function (ev) {
+        console.log('[IEM] click Geolocalización', ev && ev.type);
+        abrirModulo('ruta');
+      };
+      if (ct) ct.onclick = function (ev) {
+        console.log('[IEM] click Tema');
         document.body.classList.toggle('light-theme');
         try { localStorage.setItem('iem_cons_theme', document.body.classList.contains('light-theme') ? 'light' : 'dark'); } catch (e) {}
       };
@@ -1871,23 +1879,31 @@
   }
 
   function mostrarChooser() {
+    console.log('[IEM] mostrarChooser()');
     var ch = $('consChooser');
     var ws = $('consWorkspace');
+    console.log('[IEM] chooser=', !!ch, 'workspace=', !!ws);
     if (ch) ch.hidden = false;
     if (ws) ws.hidden = true;
     try { localStorage.setItem('iem_cons_mode', ''); } catch (e) {}
   }
 
   function abrirModulo(mode) {
+    console.log('[IEM] abrirModulo(', mode, ')');
     var ch = $('consChooser');
     var ws = $('consWorkspace');
+    console.log('[IEM] DOM chooser=', !!ch, 'workspace=', !!ws);
     if (ch) ch.hidden = true;
     if (ws) ws.hidden = false;
     setMode(mode === 'ruta' ? 'ruta' : 'carga');
   }
 
   function setMode(mode) {
+    console.log('[IEM] setMode(', mode, ')');
     var carga = mode !== 'ruta';
+    var nCarga = document.querySelectorAll('.panel-carga').length;
+    var nRuta = document.querySelectorAll('.panel-ruta').length;
+    console.log('[IEM] paneles carga=', nCarga, 'ruta=', nRuta, '→ mostrar', carga ? 'CARGA' : 'RUTA');
     document.querySelectorAll('.panel-carga').forEach(function (el) {
       el.hidden = !carga;
     });
@@ -1909,20 +1925,40 @@
     try { localStorage.setItem('iem_cons_mode', carga ? 'carga' : 'ruta'); } catch (e) {}
     if (!carga) {
       renderRutaLista();
-      try { actualizarMapaRuta(); } catch (eM) {}
+      try { actualizarMapaRuta(); } catch (eM) { console.warn('[IEM] mapa', eM); }
       if (!clientesGeo.length) cargarClientesGeo();
     }
   }
 
   function bindRuta() {
 
-    if ($('chooserCarga')) $('chooserCarga').addEventListener('click', function () { abrirModulo('carga'); });
-    if ($('chooserRuta')) $('chooserRuta').addEventListener('click', function () { abrirModulo('ruta'); });
-    if ($('btnVolverChooser')) $('btnVolverChooser').addEventListener('click', mostrarChooser);
+    console.log('[IEM] bindRuta() start');
+    if ($('chooserCarga')) {
+      $('chooserCarga').addEventListener('click', function (ev) {
+        console.log('[IEM] addEventListener click carga', ev && ev.type);
+        abrirModulo('carga');
+      });
+    } else console.warn('[IEM] #chooserCarga no existe');
+    if ($('chooserRuta')) {
+      $('chooserRuta').addEventListener('click', function (ev) {
+        console.log('[IEM] addEventListener click ruta', ev && ev.type);
+        abrirModulo('ruta');
+      });
+    } else console.warn('[IEM] #chooserRuta no existe');
+    if ($('btnVolverChooser')) {
+      $('btnVolverChooser').addEventListener('click', function () {
+        console.log('[IEM] click Volver menú');
+        mostrarChooser();
+      });
+    }
     if ($('chooserTema') && $('btnConsTema')) {
-      $('chooserTema').addEventListener('click', function () { $('btnConsTema').click(); });
+      $('chooserTema').addEventListener('click', function () {
+        console.log('[IEM] click tema → btnConsTema');
+        $('btnConsTema').click();
+      });
     } else if ($('chooserTema')) {
       $('chooserTema').addEventListener('click', function () {
+        console.log('[IEM] click tema toggle');
         document.body.classList.toggle('light-theme');
       });
     }
