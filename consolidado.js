@@ -1856,6 +1856,22 @@
     if (hint) hint.style.display = 'none';
   }
 
+  function mostrarChooser() {
+    var ch = $('consChooser');
+    var ws = $('consWorkspace');
+    if (ch) ch.hidden = false;
+    if (ws) ws.hidden = true;
+    try { localStorage.setItem('iem_cons_mode', ''); } catch (e) {}
+  }
+
+  function abrirModulo(mode) {
+    var ch = $('consChooser');
+    var ws = $('consWorkspace');
+    if (ch) ch.hidden = true;
+    if (ws) ws.hidden = false;
+    setMode(mode === 'ruta' ? 'ruta' : 'carga');
+  }
+
   function setMode(mode) {
     var carga = mode !== 'ruta';
     document.querySelectorAll('.panel-carga').forEach(function (el) {
@@ -1874,19 +1890,29 @@
       mr.hidden = carga;
       mr.style.display = carga ? 'none' : 'flex';
     }
-    var b1 = $('btnModeCarga');
-    var b2 = $('btnModeRuta');
-    if (b1) b1.classList.toggle('active', carga);
-    if (b2) b2.classList.toggle('active', !carga);
+    var title = $('consSideTitle');
+    if (title) title.textContent = carga ? '📄 Consolidado de carga' : '📍 Geolocalización';
     try { localStorage.setItem('iem_cons_mode', carga ? 'carga' : 'ruta'); } catch (e) {}
     if (!carga) {
       renderRutaLista();
-      actualizarMapaRuta();
+      try { actualizarMapaRuta(); } catch (eM) {}
       if (!clientesGeo.length) cargarClientesGeo();
     }
   }
 
   function bindRuta() {
+
+    if ($('chooserCarga')) $('chooserCarga').addEventListener('click', function () { abrirModulo('carga'); });
+    if ($('chooserRuta')) $('chooserRuta').addEventListener('click', function () { abrirModulo('ruta'); });
+    if ($('btnVolverChooser')) $('btnVolverChooser').addEventListener('click', mostrarChooser);
+    if ($('chooserTema') && $('btnConsTema')) {
+      $('chooserTema').addEventListener('click', function () { $('btnConsTema').click(); });
+    } else if ($('chooserTema')) {
+      $('chooserTema').addEventListener('click', function () {
+        document.body.classList.toggle('light-theme');
+      });
+    }
+
     if ($('btnModeCarga')) $('btnModeCarga').addEventListener('click', function () { setMode('carga'); });
     if ($('btnModeRuta')) $('btnModeRuta').addEventListener('click', function () { setMode('ruta'); });
     var rf = $('rutaFile');
@@ -1911,11 +1937,8 @@
         capturarMiUbicacion().then(go);
       } else go();
     });
-    try {
-      var mode0 = localStorage.getItem('iem_cons_mode');
-      if (mode0 === 'ruta') setMode('ruta');
-      else setMode('carga');
-    } catch (eM0) { setMode('carga'); }
+    // Siempre menú principal al entrar; no saltar directo al módulo
+    try { mostrarChooser(); } catch (eM0) {}
     try {
       var raw = localStorage.getItem('iem_ruta_reparto');
       if (raw) {

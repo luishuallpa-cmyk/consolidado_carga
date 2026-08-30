@@ -227,20 +227,89 @@
       font-size:.8rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
       color:var(--c-muted); margin:1rem 0 .4rem;
     }
+  
+    .cons-chooser {
+      min-height: 100vh; min-height: 100dvh;
+      display: flex; align-items: center; justify-content: center;
+      padding: 1.25rem;
+      background: var(--c-bg);
+    }
+    .chooser-card {
+      width: min(640px, 100%);
+      background: var(--c-card);
+      border: 1px solid var(--c-border);
+      border-radius: 18px;
+      padding: 1.5rem 1.35rem 1.35rem;
+      box-shadow: 0 12px 40px rgba(0,0,0,.25);
+      text-align: center;
+    }
+    .chooser-brand h1 { margin: 0.5rem 0 0.25rem; font-size: 1.35rem; }
+    .chooser-brand p { margin: 0 0 1.25rem; color: var(--c-muted); font-size: 0.92rem; }
+    .chooser-logo { height: 52px; width: auto; object-fit: contain; }
+    .chooser-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+    }
+    @media (min-width: 560px) {
+      .chooser-grid { grid-template-columns: 1fr 1fr; }
+    }
+    .chooser-opt {
+      cursor: pointer; text-align: left;
+      border: 1px solid var(--c-border);
+      background: color-mix(in srgb, var(--c-bg) 70%, var(--c-card));
+      color: var(--c-text);
+      border-radius: 14px;
+      padding: 1rem 1rem 1.05rem;
+      display: flex; flex-direction: column; gap: 0.35rem;
+      transition: border-color .15s, transform .12s, box-shadow .15s;
+      font: inherit;
+    }
+    .chooser-opt:hover, .chooser-opt:focus {
+      border-color: var(--c-pri);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-pri) 35%, transparent);
+      transform: translateY(-1px);
+      outline: none;
+    }
+    .chooser-ico { font-size: 1.6rem; line-height: 1; }
+    .chooser-title { font-weight: 700; font-size: 1rem; }
+    .chooser-desc { font-size: 0.8rem; color: var(--c-muted); line-height: 1.35; }
+    #consWorkspace[hidden] { display: none !important; }
+    #consChooser[hidden] { display: none !important; }
   </style>
 </head>
 <body class="cons-page">
-  <div class="cons-layout">
+  <!-- Ventana previa: elegir módulo -->
+  <div id="consChooser" class="cons-chooser">
+    <div class="chooser-card">
+      <div class="chooser-brand">
+        <img src="logo-iem.png" alt="IEM" class="chooser-logo" onerror="this.style.display='none'" />
+        <h1>IEM Logística</h1>
+        <p>Elige qué quieres hacer</p>
+      </div>
+      <div class="chooser-grid">
+        <button type="button" class="chooser-opt" id="chooserCarga" data-go="carga">
+          <span class="chooser-ico">📄</span>
+          <span class="chooser-title">Consolidado de carga</span>
+          <span class="chooser-desc">Importar Excel del día, armar hojas por camión e imprimir / PDF</span>
+        </button>
+        <button type="button" class="chooser-opt" id="chooserRuta" data-go="ruta">
+          <span class="chooser-ico">📍</span>
+          <span class="chooser-title">Geolocalización / Ruta</span>
+          <span class="chooser-desc">Liquidación de reparto, mapa por transporte y links para vendedores</span>
+        </button>
+      </div>
+      <button type="button" class="btn btn-outline btn-sm" id="chooserTema" style="margin-top:1rem">Tema claro / oscuro</button>
+    </div>
+  </div>
+
+  <div id="consWorkspace" class="cons-layout" hidden>
     <aside class="cons-sidebar no-print">
       <div class="cons-side-head">
-        <h1>📦 IEM Logística</h1>
+        <button type="button" class="btn btn-outline btn-sm" id="btnVolverChooser" style="width:100%;margin-bottom:.4rem">← Menú principal</button>
+        <h1 id="consSideTitle">📦 Carga</h1>
         <div class="cons-status" id="consStatus" hidden></div>
       </div>
-      <div class="cons-mode-tabs">
-        <button type="button" class="mode-tab active" id="btnModeCarga" data-mode="carga">Carga PDF</button>
-        <button type="button" class="mode-tab" id="btnModeRuta" data-mode="ruta">Ruta / Geo</button>
-      </div>
-      <button type="button" class="btn btn-outline btn-sm" id="btnConsTema" style="width:100%">Tema</button>
 
       <div class="cons-side-block">
         <div class="cons-fecha-badge" style="width:100%;justify-content:center;font-size:.78rem">
