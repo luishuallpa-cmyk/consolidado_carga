@@ -1646,7 +1646,13 @@
         (uniq.length - conGeo) + ' sin ubicar';
     }
     if (!uniq.length) {
-      box.innerHTML = '<p class="cons-status">Sube el Excel de liquidación / cobranza del reparto.</p>';
+      box.innerHTML = '<div class="ruta-empty"><strong>Ruta / Geolocalización</strong>' +
+        '<ol><li>Pulsa <strong>Liquidación / reparto</strong> y elige el Excel de cobranza.</li>' +
+        '<li>Elige un <strong>transporte</strong> (camión).</li>' +
+        '<li><strong>Usar mi ubicación</strong> (origen) y <strong>Maps · transporte</strong>.</li>' +
+        '<li>Opcional: <strong>Publicar a vendedores</strong>.</li></ol>' +
+        '<p style="margin:.6rem 0 0">Si no hay GPS, importa antes clientes con lat/long en Inventario.</p></div>';
+      try { actualizarMapaRuta(); } catch (e0) {}
       return;
     }
     // agrupar por camión
@@ -1690,6 +1696,7 @@
       });
     });
     box.innerHTML = html;
+    try { actualizarMapaRuta(); } catch (eM) {}
   }
 
   async function importarLiquidacion(file) {
@@ -1799,27 +1806,82 @@
     }
   }
 
+
+  function actualizarMapaRuta() {
+    var frame = $('rutaMapFrame');
+    var wrap = $('rutaMapWrap');
+    var hint = $('rutaMapHint');
+    if (!frame) return;
+    var list = paradasFiltradas();
+    var seen = Object.create(null);
+    var pts = [];
+    list.forEach(function (p) {
+      if (p.lat == null || p.lng == null) return;
+      var k = Number(p.lat).toFixed(5) + ',' + Number(p.lng).toFixed(5);
+      if (seen[k]) return;
+      seen[k] = true;
+      pts.push({ lat: Number(p.lat), lng: Number(p.lng), nom: p.nombre || p.cliente });
+    });
+    if (!pts.length) {
+      frame.src = 'about:blank';
+      if (wrap) wrap.classList.remove('has-map');
+      if (hint) {
+        hint.style.display = '';
+        hint.textContent = rutaParadas.length
+          ? 'Hay paradas pero sin GPS en catálogo. Actualiza clientes con lat/long.'
+          : '1) Pestaña Ruta/Geo  2) Sube Liquidación  3) Elige transporte  4) Maps';
+      }
+      return;
+    }
+    // OpenStreetMap embed centrado en el promedio (sin API key)
+    var lat = 0, lng = 0;
+    pts.forEach(function (p) { lat += p.lat; lng += p.lng; });
+    lat /= pts.length;
+    lng /= pts.length;
+    var pad = 0.08;
+    var minLat = lat, maxLat = lat, minLng = lng, maxLng = lng;
+    pts.forEach(function (p) {
+      if (p.lat < minLat) minLat = p.lat;
+      if (p.lat > maxLat) maxLat = p.lat;
+      if (p.lng < minLng) minLng = p.lng;
+      if (p.lng > maxLng) maxLng = p.lng;
+    });
+    minLat -= pad; maxLat += pad; minLng -= pad; maxLng += pad;
+    // marker del primer punto + bbox
+    var bbox = minLng + '%2C' + minLat + '%2C' + maxLng + '%2C' + maxLat;
+    var marker = pts[0].lat + '%2C' + pts[0].lng;
+    frame.src = 'https://www.openstreetmap.org/export/embed.html?bbox=' + bbox +
+      '&layer=mapnik&marker=' + marker;
+    if (wrap) wrap.classList.add('has-map');
+    if (hint) hint.style.display = 'none';
+  }
+
   function setMode(mode) {
-    var carga = mode === 'carga';
-    var pc = $('panelSideCarga');
-    var pr = $('panelSideRuta');
-    var mc = $('panelMainCarga');
-    var mr = $('panelMainRuta');
-    // show/hide carga blocks (camion select + pdf buttons are also carga)
+    var carga = mode !== 'ruta';
     document.querySelectorAll('.panel-carga').forEach(function (el) {
       el.hidden = !carga;
     });
-    // also hide camion + print if in ruta — they are sibling blocks without class
-    var camionLabel = null;
-    if (pr) pr.hidden = carga;
-    if (mc) mc.style.display = carga ? 'flex' : 'none';
-    if (mr) mr.hidden = carga;
+    document.querySelectorAll('.panel-ruta').forEach(function (el) {
+      el.hidden = carga;
+    });
+    var mc = $('panelMainCarga');
+    var mr = $('panelMainRuta');
+    if (mc) {
+      mc.hidden = !carga;
+      mc.style.display = carga ? 'flex' : 'none';
+    }
+    if (mr) {
+      mr.hidden = carga;
+      mr.style.display = carga ? 'none' : 'flex';
+    }
     var b1 = $('btnModeCarga');
     var b2 = $('btnModeRuta');
     if (b1) b1.classList.toggle('active', carga);
     if (b2) b2.classList.toggle('active', !carga);
+    try { localStorage.setItem('iem_cons_mode', carga ? 'carga' : 'ruta'); } catch (e) {}
     if (!carga) {
       renderRutaLista();
+      actualizarMapaRuta();
       if (!clientesGeo.length) cargarClientesGeo();
     }
   }
@@ -1832,7 +1894,7 @@
       if (rf.files && rf.files[0]) importarLiquidacion(rf.files[0]);
       rf.value = '';
     });
-    if ($('rutaFiltro')) $('rutaFiltro').addEventListener('change', renderRutaLista);
+    if ($('rutaFiltro')) $('rutaFiltro').addEventListener('change', function () { renderRutaLista(); actualizarMapaRuta(); });
     if ($('btnRutaPublicar')) $('btnRutaPublicar').addEventListener('click', publicarRutaVendedores);
     if ($('btnRutaMiUbicacion')) {
       $('btnRutaMiUbicacion').addEventListener('click', function () {
@@ -1849,6 +1911,11 @@
         capturarMiUbicacion().then(go);
       } else go();
     });
+    try {
+      var mode0 = localStorage.getItem('iem_cons_mode');
+      if (mode0 === 'ruta') setMode('ruta');
+      else setMode('carga');
+    } catch (eM0) { setMode('carga'); }
     try {
       var raw = localStorage.getItem('iem_ruta_reparto');
       if (raw) {
