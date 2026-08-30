@@ -1564,6 +1564,47 @@
       .replace(/\s+/g, ' ').trim();
   }
 
+  /** Tokens alfanuméricos de una dirección (para match fuzzy entre catálogo y liquidación). */
+  function dirTokens(s) {
+    return normTxt(s).replace(/[^A-Z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
+      .split(' ').filter(function (t) { return t.length >= 2; });
+  }
+
+  /**
+   * Puntuación 0..1 de similitud entre dos direcciones.
+   * Prioriza solapamiento de tokens y subcadena larga.
+   */
+  function scoreDirMatch(a, b) {
+    var na = normTxt(a), nb = normTxt(b);
+    if (!na || !nb) return 0;
+    if (na === nb) return 1;
+    if (na.indexOf(nb) >= 0 || nb.indexOf(na) >= 0) {
+      var shorter = Math.min(na.length, nb.length);
+      var longer = Math.max(na.length, nb.length);
+      return 0.75 + 0.25 * (shorter / longer);
+    }
+    var ta = dirTokens(a), tb = dirTokens(b);
+    if (!ta.length || !tb.length) return 0;
+    var setB = {};
+    tb.forEach(function (t) { setB[t] = true; });
+    var inter = 0;
+    ta.forEach(function (t) { if (setB[t]) inter++; });
+    var union = ta.length + tb.length - inter;
+    var jaccard = union ? inter / union : 0;
+    // bonus si los primeros tokens coinciden (calle / urbanización)
+    var prefixBonus = 0;
+    var nPref = Math.min(3, ta.length, tb.length);
+    for (var i = 0; i < nPref; i++) {
+      if (ta[i] === tb[i]) prefixBonus += 0.08;
+    }
+    return Math.min(1, jaccard * 0.85 + prefixBonus);
+  }
+
+  /**
+   * Resuelve lat/lng del cliente según la dirección de entrega usada.
+   * Un cliente puede tener varias ubicaciones en clientes_ubicaciones;
+   * se elige la que mejor coincida con la dirección de la liquidación.
+   */
   function matchClienteGeo(codigo, direccion) {
     var cod = String(codigo || '').trim();
     var dirN = normTxt(direccion);
@@ -1571,27 +1612,52 @@
     for (var i = 0; i < clientesGeo.length; i++) {
       if (String(clientesGeo[i].codigo || '').trim() === cod) { c = clientesGeo[i]; break; }
     }
-    var lat = c && c.latitud != null ? Number(c.latitud) : null;
-    var lng = c && c.longitud != null ? Number(c.longitud) : null;
-    // buscar mejor match en ubicaciones por dirección
+    var candidates = [];
+    // ubicación principal del catálogo clientes
+    if (c && c.latitud != null && c.longitud != null) {
+      candidates.push({
+        lat: Number(c.latitud),
+        lng: Number(c.longitud),
+        dir: c.direccion || '',
+        source: 'principal'
+      });
+    }
+    // ubicaciones adicionales
     var ubs = clientesGeo._ubs || [];
-    var best = null;
     for (var j = 0; j < ubs.length; j++) {
       if (String(ubs[j].cliente_codigo || '').trim() !== cod) continue;
       if (ubs[j].latitud == null || ubs[j].longitud == null) continue;
-      var ud = normTxt(ubs[j].direccion);
-      if (!dirN) { best = ubs[j]; break; }
-      if (ud && (ud.indexOf(dirN.slice(0, 20)) >= 0 || dirN.indexOf(ud.slice(0, 20)) >= 0)) {
-        best = ubs[j];
-        break;
+      candidates.push({
+        lat: Number(ubs[j].latitud),
+        lng: Number(ubs[j].longitud),
+        dir: ubs[j].direccion || '',
+        source: 'ubicacion'
+      });
+    }
+    if (!candidates.length) {
+      return { lat: null, lng: null, nombreCat: c && c.nombre };
+    }
+    // sin dirección en liquidación → primera con GPS
+    if (!dirN) {
+      var first = candidates[0];
+      return { lat: isFinite(first.lat) ? first.lat : null, lng: isFinite(first.lng) ? first.lng : null, nombreCat: c && c.nombre };
+    }
+    // elegir mejor match por dirección
+    var best = null;
+    var bestScore = -1;
+    for (var k = 0; k < candidates.length; k++) {
+      var sc = scoreDirMatch(dirN, candidates[k].dir);
+      if (sc > bestScore) {
+        bestScore = sc;
+        best = candidates[k];
       }
-      if (!best) best = ubs[j];
     }
-    if (best) {
-      lat = Number(best.latitud);
-      lng = Number(best.longitud);
+    // umbral mínimo: si el mejor score es muy bajo, aún usamos el mejor disponible
+    // (mejor un GPS aproximado del cliente que ninguno)
+    if (best && isFinite(best.lat) && isFinite(best.lng)) {
+      return { lat: best.lat, lng: best.lng, nombreCat: c && c.nombre, matchScore: bestScore };
     }
-    return { lat: isFinite(lat) ? lat : null, lng: isFinite(lng) ? lng : null, nombreCat: c && c.nombre };
+    return { lat: null, lng: null, nombreCat: c && c.nombre };
   }
 
   function filaLiquidacionAParada(row) {
