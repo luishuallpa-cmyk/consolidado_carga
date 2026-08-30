@@ -1531,12 +1531,12 @@
   }
 
   async function cargarClientesGeo() {
-    if (!supabase) return;
+    if (!supabaseClient) return;
     clientesGeo = [];
     try {
       var PAGE = 1000, from = 0, all = [];
       for (;;) {
-        var res = await supabase.from('clientes')
+        var res = await supabaseClient.from('clientes')
           .select('codigo,nombre,direccion,latitud,longitud')
           .range(from, from + PAGE - 1);
         if (res.error) throw res.error;
@@ -1549,7 +1549,7 @@
       clientesGeo = all;
       // ubicaciones extra
       try {
-        var u = await supabase.from('clientes_ubicaciones')
+        var u = await supabaseClient.from('clientes_ubicaciones')
           .select('cliente_codigo,direccion,latitud,longitud,codigo_zona')
           .limit(20000);
         if (u.data) clientesGeo._ubs = u.data;
@@ -1888,7 +1888,7 @@
       alert('Primero importa el Excel de liquidación.');
       return;
     }
-    if (!supabase) {
+    if (!supabaseClient) {
       alert('Sin Supabase.');
       return;
     }
@@ -1934,12 +1934,12 @@
     rows.forEach(function (r) { fechas[r.fecha] = true; });
     try {
       for (var f in fechas) {
-        await supabase.from('rutas_entrega').delete().eq('fecha', f);
+        await supabaseClient.from('rutas_entrega').delete().eq('fecha', f);
       }
       var TAM = 100;
       for (var i = 0; i < rows.length; i += TAM) {
         var lote = rows.slice(i, i + TAM);
-        var res = await supabase.from('rutas_entrega').insert(lote);
+        var res = await supabaseClient.from('rutas_entrega').insert(lote);
         if (res.error) throw res.error;
       }
       if (st) st.textContent = '✅ Publicadas ' + rows.length + ' paradas. Los vendedores verán solo las suyas.';
@@ -1957,40 +1957,11 @@
   }
 
 
-  // Mapa Leaflet de la ruta (un pin por cliente, no solo uno). Se crea una
-  // sola vez (lazy) y se reutiliza; en cada llamada se limpian y se vuelven
-  // a poner los marcadores según el transporte filtrado.
-  var rutaMap = null;
-  var rutaMapCapa = null; // L.layerGroup con pines + línea de la ruta
-
-  function asegurarRutaMap() {
-    if (rutaMap || typeof L === 'undefined') return rutaMap;
-    var el = $('rutaMapEl');
-    if (!el) return null;
-    rutaMap = L.map(el, { attributionControl: true, zoomControl: true }).setView([-12.05, -75.0], 5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-    }).addTo(rutaMap);
-    rutaMapCapa = L.layerGroup().addTo(rutaMap);
-    return rutaMap;
-  }
-
-  function pinIcono(numero, esOrigen) {
-    return L.divIcon({
-      className: '',
-      html: '<div class="ruta-pin' + (esOrigen ? ' ruta-pin-origen' : '') + '"><span>' + esc(numero) + '</span></div>',
-      iconSize: [26, 26],
-      iconAnchor: [13, 26],
-      popupAnchor: [0, -26]
-    });
-  }
-
   function actualizarMapaRuta() {
+    var frame = $('rutaMapFrame');
     var wrap = $('rutaMapWrap');
     var hint = $('rutaMapHint');
-    var map = asegurarRutaMap();
-    if (!map) return; // Leaflet no cargó (sin red / CDN caído): se deja el aviso visible
+    if (!frame) return;
     var list = paradasFiltradas();
     var seen = Object.create(null);
     var pts = [];
@@ -1999,17 +1970,10 @@
       var k = Number(p.lat).toFixed(5) + ',' + Number(p.lng).toFixed(5);
       if (seen[k]) return;
       seen[k] = true;
-      pts.push({
-        lat: Number(p.lat),
-        lng: Number(p.lng),
-        nombre: p.nombre || p.cliente,
-        cliente: p.cliente,
-        direccion: p.direccion,
-        saldo: p.saldo
-      });
+      pts.push({ lat: Number(p.lat), lng: Number(p.lng), nom: p.nombre || p.cliente });
     });
-    rutaMapCapa.clearLayers();
     if (!pts.length) {
+      frame.src = 'about:blank';
       if (wrap) wrap.classList.remove('has-map');
       if (hint) {
         hint.style.display = '';
@@ -2019,38 +1983,27 @@
       }
       return;
     }
-    var latLngs = [];
-    if (miUbicacion) {
-      L.marker([miUbicacion.lat, miUbicacion.lng], { icon: pinIcono('●', true) })
-        .bindPopup('<div class="ruta-popup"><b>Mi ubicación (origen)</b></div>')
-        .addTo(rutaMapCapa);
-      latLngs.push([miUbicacion.lat, miUbicacion.lng]);
-    }
-    pts.forEach(function (p, i) {
-      var popup = '<div class="ruta-popup"><b>' + esc(i + 1) + '. ' + esc(p.nombre || p.cliente) + '</b>' +
-        (p.direccion ? '<div class="ruta-popup-dir">' + esc(p.direccion) + '</div>' : '') +
-        (p.saldo ? '<div>Saldo: ' + esc(p.saldo) + '</div>' : '') + '</div>';
-      L.marker([p.lat, p.lng], { icon: pinIcono(i + 1, false) })
-        .bindPopup(popup)
-        .addTo(rutaMapCapa);
-      latLngs.push([p.lat, p.lng]);
+    // OpenStreetMap embed centrado en el promedio (sin API key)
+    var lat = 0, lng = 0;
+    pts.forEach(function (p) { lat += p.lat; lng += p.lng; });
+    lat /= pts.length;
+    lng /= pts.length;
+    var pad = 0.08;
+    var minLat = lat, maxLat = lat, minLng = lng, maxLng = lng;
+    pts.forEach(function (p) {
+      if (p.lat < minLat) minLat = p.lat;
+      if (p.lat > maxLat) maxLat = p.lat;
+      if (p.lng < minLng) minLng = p.lng;
+      if (p.lng > maxLng) maxLng = p.lng;
     });
-    // Línea que conecta las paradas en el orden de la liquidación (referencia
-    // visual del recorrido; no es la ruta real por calles, solo el orden).
-    if (latLngs.length > 1) {
-      L.polyline(latLngs, { color: '#3B6EA5', weight: 3, opacity: 0.6, dashArray: '6 6' })
-        .addTo(rutaMapCapa);
-    }
+    minLat -= pad; maxLat += pad; minLng -= pad; maxLng += pad;
+    // marker del primer punto + bbox
+    var bbox = minLng + '%2C' + minLat + '%2C' + maxLng + '%2C' + maxLat;
+    var marker = pts[0].lat + '%2C' + pts[0].lng;
+    frame.src = 'https://www.openstreetmap.org/export/embed.html?bbox=' + bbox +
+      '&layer=mapnik&marker=' + marker;
     if (wrap) wrap.classList.add('has-map');
     if (hint) hint.style.display = 'none';
-    setTimeout(function () {
-      map.invalidateSize();
-      if (latLngs.length > 1) {
-        map.fitBounds(L.latLngBounds(latLngs), { padding: [30, 30] });
-      } else {
-        map.setView(latLngs[0], 15);
-      }
-    }, 0);
   }
 
   function mostrarChooser() {
