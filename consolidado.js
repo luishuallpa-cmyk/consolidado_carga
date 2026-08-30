@@ -1882,9 +1882,9 @@
     console.log('[IEM] mostrarChooser()');
     var ch = $('consChooser');
     var ws = $('consWorkspace');
-    console.log('[IEM] chooser=', !!ch, 'workspace=', !!ws);
     if (ch) ch.hidden = false;
     if (ws) ws.hidden = true;
+    document.body.classList.remove('mode-carga', 'mode-ruta');
     try { localStorage.setItem('iem_cons_mode', ''); } catch (e) {}
   }
 
@@ -1901,14 +1901,15 @@
   function setMode(mode) {
     console.log('[IEM] setMode(', mode, ')');
     var carga = mode !== 'ruta';
-    var nCarga = document.querySelectorAll('.panel-carga').length;
-    var nRuta = document.querySelectorAll('.panel-ruta').length;
-    console.log('[IEM] paneles carga=', nCarga, 'ruta=', nRuta, '→ mostrar', carga ? 'CARGA' : 'RUTA');
+    document.body.classList.toggle('mode-carga', carga);
+    document.body.classList.toggle('mode-ruta', !carga);
     document.querySelectorAll('.panel-carga').forEach(function (el) {
       el.hidden = !carga;
+      el.style.display = carga ? '' : 'none';
     });
     document.querySelectorAll('.panel-ruta').forEach(function (el) {
       el.hidden = carga;
+      el.style.display = carga ? 'none' : '';
     });
     var mc = $('panelMainCarga');
     var mr = $('panelMainRuta');
@@ -1920,13 +1921,24 @@
       mr.hidden = carga;
       mr.style.display = carga ? 'none' : 'flex';
     }
+    // Ocultar texto de estado de ruta en modo carga
+    var rs = $('rutaStats');
+    if (rs && carga) rs.textContent = '';
     var title = $('consSideTitle');
     if (title) title.textContent = carga ? '📄 Consolidado de carga' : '📍 Geolocalización';
     try { localStorage.setItem('iem_cons_mode', carga ? 'carga' : 'ruta'); } catch (e) {}
+    console.log('[IEM] body classes', document.body.className);
     if (!carga) {
       renderRutaLista();
       try { actualizarMapaRuta(); } catch (eM) { console.warn('[IEM] mapa', eM); }
       if (!clientesGeo.length) cargarClientesGeo();
+    } else {
+      // regenerar vista PDF si hay datos
+      try {
+        if (typeof lineas !== 'undefined' && lineas.length && typeof renderVistaPreviaPanel === 'function') {
+          renderVistaPreviaPanel();
+        }
+      } catch (eP) {}
     }
   }
 

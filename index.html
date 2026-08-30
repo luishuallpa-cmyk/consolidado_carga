@@ -276,6 +276,45 @@
     .chooser-desc { font-size: 0.8rem; color: var(--c-muted); line-height: 1.35; }
     #consWorkspace[hidden] { display: none !important; }
     #consChooser[hidden] { display: none !important; }
+
+    /* —— Modos: solo un módulo visible —— */
+    body.mode-carga .panel-ruta,
+    body.mode-carga #panelMainRuta { display: none !important; }
+    body.mode-ruta .panel-carga,
+    body.mode-ruta #panelMainCarga { display: none !important; }
+    body.mode-carga #panelMainCarga { display: flex !important; }
+    body.mode-ruta #panelMainRuta { display: flex !important; }
+
+    .cons-sidebar {
+      width: 200px;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--c-card) 95%, #000) 0%, var(--c-card) 100%);
+    }
+    .cons-side-head h1 {
+      margin: 0.15rem 0 0.35rem;
+      font-size: 0.98rem;
+      line-height: 1.25;
+    }
+    .cons-side-block {
+      padding: 0.55rem 0;
+      border-top: 1px solid color-mix(in srgb, var(--c-border) 80%, transparent);
+    }
+    .cons-side-block:first-of-type { border-top: none; }
+    .cons-side-block .btn { border-radius: 10px; }
+    .cons-side-block label.btn { margin: 0; }
+    .cons-fecha-badge {
+      background: color-mix(in srgb, var(--c-pri) 22%, transparent);
+      border: 1px solid color-mix(in srgb, var(--c-pri) 55%, var(--c-border));
+    }
+    #btnVolverChooser {
+      font-size: 0.78rem;
+      opacity: 0.95;
+    }
+    .cons-main {
+      background: #3f3f46;
+    }
+    body.mode-carga .cons-main {
+      background: #404040;
+    }
   </style>
 </head>
 <body class="cons-page">
@@ -349,6 +388,7 @@
       <div class="cons-side-block panel-carga">
         <button type="button" class="btn btn-primary btn-sm" id="btnConsPrintUno" style="width:100%">PDF camión</button>
         <button type="button" class="btn btn-primary btn-sm" id="btnConsPrintMulti" style="width:100%;margin-top:.35rem">PDF todos</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btnConsTema" style="width:100%;margin-top:.35rem">Tema</button>
       </div>
 
       <div class="cons-side-block panel-ruta" id="panelSideRuta" hidden>
