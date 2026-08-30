@@ -908,8 +908,8 @@
 
   /** Ítems por hoja (A4 con cabecera IEM + grupos). Ajuste fino si hace falta. */
   // Capacidad por hoja (unidades): fila=1, header categoría=2, banner FRIOS/SECOS=2
-  var UNIDADES_POR_HOJA = 26;
-  var ITEMS_POR_HOJA = 16; // tope de filas (headers consumen cupo)
+  var UNIDADES_POR_HOJA = 40;
+  var ITEMS_POR_HOJA = 24; // tope de filas (headers consumen cupo)
 
   function pesoVisualFila(it, prevTipo, prevCat) {
     var u = 1;
@@ -958,15 +958,15 @@
       var tipo = r.tipoKey;
       var cat = r.categoria;
       var need = 1;
-      if (tipo && tipo !== prevTipo) need += 2;
-      if (cat && cat !== prevCat) need += 2;
+      if (tipo && tipo !== prevTipo) need += 1;
+      if (cat && cat !== prevCat) need += 1;
       if (cur.length && (units + need > UNIDADES_POR_HOJA || cur.length >= ITEMS_POR_HOJA)) {
         pages.push({ rows: cur, pesoTotalCamion: pesoTotal, esUltima: false });
         cur = [];
         units = 0;
         prevTipo = '';
         prevCat = '';
-        need = 1 + 2 + 2; // nueva hoja: tipo + cat + fila
+        need = 1 + (tipo ? 1 : 0) + (cat ? 1 : 0);
       }
       cur.push(r);
       units += need;
@@ -1597,7 +1597,20 @@
   function filaLiquidacionAParada(row) {
     var tipo = String(valRow(row, ['Tipo', 'tipo'])).toUpperCase();
     // solo ventas con entrega (omitir notas crédito sin dirección útil si se desea)
-    var codCli = String(valRow(row, ['CodigoCliente', 'CódigoCliente', 'ClienteCodigo', 'Codigo Cliente'])).trim();
+    var codCli = String(valRow(row, [
+      'CodigoCliente', 'CódigoCliente', 'ClienteCodigo', 'Codigo Cliente',
+      'CodCliente', 'CODIGOCLIENTE', 'Cliente', 'codigo_cliente'
+    ])).trim();
+    if (!codCli) {
+      // fallback: buscar cualquier key que parezca código cliente
+      Object.keys(row || {}).forEach(function (k) {
+        if (codCli) return;
+        if (normKey(k).indexOf('CODIGOCLIENTE') >= 0 || normKey(k) === 'CODCLIENTE') {
+          var v = String(row[k] || '').trim();
+          if (v) codCli = v;
+        }
+      });
+    }
     if (!codCli) return null;
     var dir = String(valRow(row, ['DireccionEntrega', 'Direccion', 'Dirección', 'Direccion Entrega'])).trim();
     var vend = String(valRow(row, ['CodigoVendedor', 'CódigoVendedor', 'VendedorCodigo'])).trim();
@@ -1725,30 +1738,79 @@
     if (!file) return;
     var st = $('rutaImportStatus');
     if (st) st.textContent = 'Leyendo ' + file.name + '…';
-    if (!clientesGeo.length) await cargarClientesGeo();
+    if (typeof XLSX === 'undefined') {
+      if (st) st.textContent = 'Falta librería Excel (XLSX). Recarga la página.';
+      return;
+    }
     try {
       var buf = await file.arrayBuffer();
       var wb = XLSX.read(buf, { type: 'array' });
-      var sheet = wb.Sheets[wb.SheetNames[0]];
-      var filas = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+      var filas = [];
+      var sheetUs = '';
+      // Probar todas las hojas hasta encontrar filas con CódigoCliente
+      for (var si = 0; si < wb.SheetNames.length; si++) {
+        var sh = wb.Sheets[wb.SheetNames[si]];
+        var rows = XLSX.utils.sheet_to_json(sh, { defval: '', raw: false });
+        if (!rows.length) continue;
+        var sample = rows[0];
+        var keys = Object.keys(sample || {});
+        console.log('[IEM] hoja', wb.SheetNames[si], 'cols', keys.slice(0, 12));
+        var tieneCli = keys.some(function (k) {
+          var n = normKey(k);
+          return n.indexOf('CODIGOCLIENTE') >= 0 || n === 'CLIENTECODIGO' || n === 'CODCLIENTE';
+        });
+        if (tieneCli || rows.length > filas.length) {
+          filas = rows;
+          sheetUs = wb.SheetNames[si];
+          if (tieneCli) break;
+        }
+      }
+      if (!filas.length) {
+        if (st) st.textContent = 'Excel vacío o sin filas legibles.';
+        return;
+      }
       var out = [];
+      var skip = 0;
       filas.forEach(function (row) {
         var p = filaLiquidacionAParada(row);
-        if (!p) return;
-        // omitir notas de crédito sin dirección si no aportan ruta
-        if (/NOTA/.test(p.tipo || '') && !p.direccion) return;
+        if (!p) { skip++; return; }
+        if (/NOTA/.test(p.tipo || '') && !p.direccion) { skip++; return; }
         out.push(p);
       });
+      console.log('[IEM] liquidación', sheetUs, 'ok=', out.length, 'skip=', skip);
       rutaParadas = out;
-      try {
-        localStorage.setItem('iem_ruta_reparto', JSON.stringify({
-          ts: Date.now(),
-          paradas: rutaParadas
-        }));
-      } catch (eL) {}
+      // GPS en segundo plano (no bloquea la lista)
+      if (st) st.textContent = 'Importadas ' + out.length + ' paradas. Buscando GPS…';
       actualizarSelectRuta();
       renderRutaLista();
-      if (st) st.textContent = 'Importadas ' + out.length + ' filas de ' + file.name;
+      try {
+        localStorage.setItem('iem_ruta_reparto', JSON.stringify({ ts: Date.now(), paradas: rutaParadas }));
+      } catch (eL) {}
+
+      (async function () {
+        try {
+          if (!clientesGeo.length) await cargarClientesGeo();
+          // re-match geo
+          rutaParadas.forEach(function (p) {
+            var g = matchClienteGeo(p.cliente, p.direccion);
+            p.lat = g.lat;
+            p.lng = g.lng;
+            if (!p.nombre && g.nombreCat) p.nombre = g.nombreCat;
+          });
+          var con = rutaParadas.filter(function (p) { return p.lat != null; }).length;
+          try {
+            localStorage.setItem('iem_ruta_reparto', JSON.stringify({ ts: Date.now(), paradas: rutaParadas }));
+          } catch (e2) {}
+          actualizarSelectRuta();
+          renderRutaLista();
+          if (st) {
+            st.textContent = out.length + ' paradas · ' + con + ' con GPS · hoja «' + sheetUs + '»';
+          }
+        } catch (eG) {
+          console.warn('[IEM] geo match', eG);
+          if (st) st.textContent = out.length + ' paradas (sin match GPS: ' + (eG.message || eG) + ')';
+        }
+      })();
     } catch (e) {
       console.error(e);
       if (st) st.textContent = 'Error: ' + (e.message || e);
@@ -1933,12 +1995,14 @@
       try { actualizarMapaRuta(); } catch (eM) { console.warn('[IEM] mapa', eM); }
       if (!clientesGeo.length) cargarClientesGeo();
     } else {
-      // regenerar vista PDF si hay datos
-      try {
-        if (typeof lineas !== 'undefined' && lineas.length && typeof renderVistaPreviaPanel === 'function') {
-          renderVistaPreviaPanel();
-        }
-      } catch (eP) {}
+      // UI primero; PDF en el siguiente tick (menos demora al entrar)
+      setTimeout(function () {
+        try {
+          if (typeof lineas !== 'undefined' && lineas.length && typeof renderVistaPreviaPanel === 'function') {
+            renderVistaPreviaPanel();
+          }
+        } catch (eP) { console.warn('[IEM] pdf', eP); }
+      }, 50);
     }
   }
 
@@ -1992,7 +2056,13 @@
     if ($('btnRutaMaps')) $('btnRutaMaps').addEventListener('click', function () {
       var go = function () {
         var link = mapsLinkMulti(paradasFiltradas());
-        if (!link) { alert('No hay puntos con GPS en el filtro.'); return; }
+        if (!link) {
+          var n = paradasFiltradas().length;
+          alert(n
+            ? ('Hay ' + n + ' paradas pero ninguna con GPS.\nImporta clientes con lat/long en Inventario o revisa códigos.')
+            : 'No hay paradas. Sube el Excel de liquidación y espera a que termine de importar.');
+          return;
+        }
         window.open(link, '_blank', 'noopener');
       };
       if (!miUbicacion) {
