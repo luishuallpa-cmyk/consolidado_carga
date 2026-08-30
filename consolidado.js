@@ -590,13 +590,14 @@
      */
     var PAGE_W = 794;
     var PAGE_H = 1123;
-    var PAD = 28; // ~7.4 mm de margen interno uniforme
+    var PAD = 22; // ~6 mm
 
     host.style.cssText = 'position:fixed;left:0;top:0;width:' + PAGE_W +
       'px;background:#fff;z-index:-1;opacity:0.01;pointer-events:none;overflow:visible;';
 
     var els = Array.prototype.slice.call(pages);
     els.forEach(function (el) {
+      // Caja A4 fija: contenido compacto para no cortar tablas
       el.style.cssText = [
         'width:' + PAGE_W + 'px',
         'height:' + PAGE_H + 'px',
@@ -609,9 +610,25 @@
         'background:#ffffff',
         'color:#0f172a',
         'font-family:Segoe UI,Arial,sans-serif',
-        'font-size:11px',
-        'line-height:1.25'
+        'font-size:10px',
+        'line-height:1.2'
       ].join(';');
+      // Compactar tablas internas
+      el.querySelectorAll('table').forEach(function (tb) {
+        tb.style.fontSize = '9.5px';
+        tb.style.borderCollapse = 'collapse';
+        tb.style.width = '100%';
+      });
+      el.querySelectorAll('th,td').forEach(function (c) {
+        c.style.padding = '2px 3px';
+      });
+      el.querySelectorAll('.print-header').forEach(function (h) {
+        h.style.marginBottom = '8px';
+        h.style.paddingBottom = '6px';
+      });
+      el.querySelectorAll('img').forEach(function (img) {
+        img.style.height = '40px';
+      });
     });
 
     // scale 1 = 1 CSS px → 1 canvas px (predecible). 1.5 si se quiere más nitidez.
@@ -890,76 +907,87 @@
   }
 
   /** Ítems por hoja (A4 con cabecera IEM + grupos). Ajuste fino si hace falta. */
-  var ITEMS_POR_HOJA = 24;
+  // Capacidad por hoja (unidades): fila=1, header categoría=2, banner FRIOS/SECOS=2
+  var UNIDADES_POR_HOJA = 26;
+  var ITEMS_POR_HOJA = 16; // tope de filas (headers consumen cupo)
+
+  function pesoVisualFila(it, prevTipo, prevCat) {
+    var u = 1;
+    var tipo = String((it && it.tipo) || '').toUpperCase();
+    var cat = String((it && (it.categoria || it.linea)) || 'OTROS').toUpperCase();
+    if (tipo && tipo !== prevTipo) u += 2;
+    if (cat && cat !== prevCat) u += 2;
+    return u;
+  }
 
   function ordenarItemsParaHojas(items) {
     var list = (items || []).map(function (it) {
-      var copy = Object.assign({}, it);
-      copy.tipo = tipoPorCodigo(copy.codigo, copy.descripcion, copy.linea);
-      copy._categoria = categoriaDeItem(copy);
-      return copy;
+      var tipo = String(it.tipo || clasificarProducto(it) || '').toUpperCase();
+      if (tipo.indexOf('FRIO') >= 0) tipo = 'FRIOS';
+      else if (tipo.indexOf('SECO') >= 0) tipo = 'SECOS';
+      else if (tipo !== 'FRIOS' && tipo !== 'SECOS') tipo = tipoDe(it) || 'SECOS';
+      var cat = '';
+      try { cat = categoriaDeItem(it) || 'OTROS'; } catch (e) { cat = 'OTROS'; }
+      return {
+        tipoKey: tipo === 'FRIOS' ? 'FRIOS' : 'SECOS',
+        categoria: String(cat || 'OTROS').toUpperCase(),
+        item: it
+      };
     });
-    var frios = list.filter(function (it) { return String(it.tipo || '').toUpperCase().indexOf('FRIO') >= 0; });
-    var secos = list.filter(function (it) { return String(it.tipo || '').toUpperCase().indexOf('FRIO') < 0; });
-
-    function porCat(arr) {
-      var grupos = Object.create(null);
-      var orden = [];
-      arr.forEach(function (it) {
-        var cat = it._categoria || 'OTROS';
-        if (!grupos[cat]) { grupos[cat] = []; orden.push(cat); }
-        grupos[cat].push(it);
-      });
-      orden.sort();
-      orden.forEach(function (cat) {
-        grupos[cat].sort(function (a, b) {
-          return String(a.codigo).localeCompare(String(b.codigo), 'es', { numeric: true });
-        });
-      });
-      return { orden: orden, grupos: grupos };
-    }
-    return { frios: porCat(frios), secos: porCat(secos) };
+    list.sort(function (a, b) {
+      if (a.tipoKey !== b.tipoKey) return a.tipoKey === 'FRIOS' ? -1 : 1;
+      if (a.categoria !== b.categoria) return a.categoria.localeCompare(b.categoria);
+      return String(a.item.codigo || '').localeCompare(String(b.item.codigo || ''));
+    });
+    return list;
   }
 
-  /**
-   * Parte ítems de UN camión en hojas.
-   * - No deja huérfanos (< 4 ítems en la última hoja: se fusionan con la anterior)
-   * - Numeración es por camión (la arma htmlDocumento)
-   */
   function partirItemsEnPaginas(items) {
-    var ord = ordenarItemsParaHojas(items);
-    var seq = [];
-    function pushTipo(tipoKey, bloque) {
-      bloque.orden.forEach(function (cat) {
-        (bloque.grupos[cat] || []).forEach(function (it) {
-          seq.push({ tipoKey: tipoKey, categoria: cat, item: it });
-        });
-      });
-    }
-    pushTipo('FRIOS', ord.frios);
-    pushTipo('SECOS', ord.secos);
-
+    var seq = ordenarItemsParaHojas(items);
     var pesoTotal = 0;
-    seq.forEach(function (r) { pesoTotal += Number(r.item.peso) || 0; });
-    if (!seq.length) {
-      return [{ rows: [], pesoTotalCamion: 0, esUltima: true }];
-    }
-
-    var pages = [];
-    for (var i = 0; i < seq.length; i += ITEMS_POR_HOJA) {
-      pages.push({ rows: seq.slice(i, i + ITEMS_POR_HOJA), pesoTotalCamion: pesoTotal, esUltima: false });
-    }
-    // Evitar hoja final casi vacía (1–3 ítems)
-    if (pages.length >= 2 && pages[pages.length - 1].rows.length < 4) {
-      var last = pages.pop();
-      pages[pages.length - 1].rows = pages[pages.length - 1].rows.concat(last.rows);
-    }
-    pages.forEach(function (pg, idx) {
-      pg.esUltima = idx === pages.length - 1;
-      pg.pesoTotalCamion = pesoTotal;
+    seq.forEach(function (r) {
+      var n = Number(r.item && r.item.peso);
+      if (isFinite(n)) pesoTotal += n;
     });
+    var pages = [];
+    var cur = [];
+    var units = 0;
+    var prevTipo = '';
+    var prevCat = '';
+    seq.forEach(function (r) {
+      var tipo = r.tipoKey;
+      var cat = r.categoria;
+      var need = 1;
+      if (tipo && tipo !== prevTipo) need += 2;
+      if (cat && cat !== prevCat) need += 2;
+      if (cur.length && (units + need > UNIDADES_POR_HOJA || cur.length >= ITEMS_POR_HOJA)) {
+        pages.push({ rows: cur, pesoTotalCamion: pesoTotal, esUltima: false });
+        cur = [];
+        units = 0;
+        prevTipo = '';
+        prevCat = '';
+        need = 1 + 2 + 2; // nueva hoja: tipo + cat + fila
+      }
+      cur.push(r);
+      units += need;
+      prevTipo = tipo;
+      prevCat = cat;
+    });
+    if (cur.length) pages.push({ rows: cur, pesoTotalCamion: pesoTotal, esUltima: false });
+    if (!pages.length) pages.push({ rows: [], pesoTotalCamion: pesoTotal, esUltima: true });
+    pages.forEach(function (pg, idx) { pg.esUltima = idx === pages.length - 1; });
+    if (pages.length >= 2) {
+      var last = pages[pages.length - 1];
+      var prev = pages[pages.length - 2];
+      if (last.rows.length <= 2 && prev.rows.length + last.rows.length <= ITEMS_POR_HOJA + 2) {
+        prev.rows = prev.rows.concat(last.rows);
+        prev.esUltima = true;
+        pages.pop();
+      }
+    }
     return pages;
   }
+
 
   function fmtPesoNum(n) {
     var x = Number(n) || 0;
@@ -987,25 +1015,25 @@
         lastCat = '';
         var nom = lastTipo === 'FRIOS' ? '❄ FRÍOS' : '📦 SECOS';
         var bg = lastTipo === 'FRIOS' ? '#0e7490' : '#b45309';
-        html += '<div class="blk-tipo" style="margin:8px 0 4px;padding:6px 10px;border-radius:6px;background:' + bg +
-          ';color:#fff;font-weight:800;font-size:10.5pt;' +
+        html += '<div class="blk-tipo" style="margin:6px 0 3px;padding:4px 8px;border-radius:5px;background:' + bg +
+          ';color:#fff;font-weight:800;font-size:9.5pt;' +
           '-webkit-print-color-adjust:exact;print-color-adjust:exact;">' + nom + '</div>';
       }
       if (r.categoria !== lastCat) {
         closeTable();
         lastCat = r.categoria;
-        html += '<div style="font-weight:700;margin:8px 0 4px;font-size:9.5pt;background:#1e3a5f;color:#fff;padding:5px 10px;border-radius:6px;' +
+        html += '<div style="font-weight:700;margin:5px 0 2px;font-size:8.5pt;background:#1e3a5f;color:#fff;padding:3px 8px;border-radius:5px;' +
           'page-break-after:avoid;break-after:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact;">' +
           esc(lastCat) + '</div>';
-        html += '<table class="cons-print-table" style="width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:8px;page-break-inside:auto;">' +
+        html += '<table class="cons-print-table" style="width:100%;border-collapse:collapse;font-size:8.5pt;margin-bottom:4px;page-break-inside:auto;">' +
           '<thead style="display:table-header-group;-webkit-print-color-adjust:exact;print-color-adjust:exact;"><tr style="background:#e2e8f0;-webkit-print-color-adjust:exact;print-color-adjust:exact;">' +
-          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:40px;">ITEM</th>' +
-          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Código</th>' +
-          '<th style="border:1px solid #94a3b8;padding:5px 4px;">Producto / Descripción</th>' +
-          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:60px;">Unidad</th>' +
-          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:48px;">Cajas</th>' +
-          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Und. sueltas</th>' +
-          '<th style="border:1px solid #94a3b8;padding:5px 4px;width:56px;">Peso</th></tr></thead><tbody>';
+          '<th style="border:1px solid #94a3b8;padding:3px 3px;width:40px;">ITEM</th>' +
+          '<th style="border:1px solid #94a3b8;padding:3px 3px;width:56px;">Código</th>' +
+          '<th style="border:1px solid #94a3b8;padding:3px 3px;">Producto / Descripción</th>' +
+          '<th style="border:1px solid #94a3b8;padding:3px 3px;width:60px;">Unidad</th>' +
+          '<th style="border:1px solid #94a3b8;padding:3px 3px;width:48px;">Cajas</th>' +
+          '<th style="border:1px solid #94a3b8;padding:3px 3px;width:56px;">Und. sueltas</th>' +
+          '<th style="border:1px solid #94a3b8;padding:3px 3px;width:56px;">Peso</th></tr></thead><tbody>';
         tableOpen = true;
       }
       n++;
@@ -1013,13 +1041,13 @@
       var fac = Number(it.factor) > 1 ? Number(it.factor) : 1;
       var cu = cantACajasUnd(it.cantidad, fac);
       html += '<tr style="page-break-inside:avoid;">' +
-        '<td style="border:1px solid #cbd5e1;padding:4px;text-align:center;">' + n + '</td>' +
-        '<td style="border:1px solid #cbd5e1;padding:4px;font-family:monospace;font-weight:600;">' + esc(it.codigo) + '</td>' +
-        '<td style="border:1px solid #cbd5e1;padding:4px;">' + esc(it.descripcion) + '</td>' +
-        '<td style="border:1px solid #cbd5e1;padding:4px;">' + esc(it.unidad_ref || '') + '</td>' +
-        '<td style="border:1px solid #cbd5e1;padding:4px;text-align:center;">' + (cu.cajas === '' ? '' : cu.cajas) + '</td>' +
-        '<td style="border:1px solid #cbd5e1;padding:4px;text-align:center;">' + cu.sueltas + '</td>' +
-        '<td style="border:1px solid #cbd5e1;padding:4px;text-align:right;">' + fmtPeso(it.peso) + '</td></tr>';
+        '<td style="border:1px solid #cbd5e1;padding:2px 3px;text-align:center;">' + n + '</td>' +
+        '<td style="border:1px solid #cbd5e1;padding:2px 3px;font-family:monospace;font-weight:600;">' + esc(it.codigo) + '</td>' +
+        '<td style="border:1px solid #cbd5e1;padding:2px 3px;">' + esc(it.descripcion) + '</td>' +
+        '<td style="border:1px solid #cbd5e1;padding:2px 3px;">' + esc(it.unidad_ref || '') + '</td>' +
+        '<td style="border:1px solid #cbd5e1;padding:2px 3px;text-align:center;">' + (cu.cajas === '' ? '' : cu.cajas) + '</td>' +
+        '<td style="border:1px solid #cbd5e1;padding:2px 3px;text-align:center;">' + cu.sueltas + '</td>' +
+        '<td style="border:1px solid #cbd5e1;padding:2px 3px;text-align:right;">' + fmtPeso(it.peso) + '</td></tr>';
     });
     closeTable();
     return { html: html, lastItem: n };
@@ -1070,9 +1098,9 @@
       '-webkit-print-color-adjust:exact;print-color-adjust:exact;">' +
       '<div class="print-header" style="display:flex;align-items:center;gap:14px;border-bottom:3px solid #1d4ed8;' +
       'padding-bottom:10px;margin-bottom:12px;page-break-after:avoid;">' +
-        '<img src="' + LOGO_URL + '" alt="IEM" style="height:48px;width:auto;object-fit:contain;" onerror="this.style.display=\'none\'" />' +
+        '<img src="' + LOGO_URL + '" alt="IEM" style="height:40px;width:auto;object-fit:contain;" onerror="this.style.display=\'none\'" />' +
         '<div style="flex:1;">' +
-          '<div style="font-size:13pt;font-weight:800;color:#1e3a5f;">' + esc(tituloFijo) + badgeHoja + '</div>' +
+          '<div style="font-size:11.5pt;font-weight:800;color:#1e3a5f;">' + esc(tituloFijo) + badgeHoja + '</div>' +
           '<div style="margin-top:6px;font-size:10pt;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">' +
             '<span style="background:#1d4ed8;color:#fff;padding:3px 10px;border-radius:999px;font-weight:700;">' + esc(camion || '') + '</span>' +
             '<span><strong>Fecha:</strong> ' + esc(fecha || '') + '</span>' +
@@ -1406,6 +1434,431 @@
         try { importarArchivos(lastImportFiles); } catch (eR) {}
       }
     });
+  }
+
+
+  // ============================================================
+  // RUTA / GEO — Liquidación de reparto (cobranza)
+  // ============================================================
+  var rutaParadas = []; // { vendedor, camion, cliente, nombre, direccion, lat, lng, numCp, saldo, placa, fecha }
+  var clientesGeo = []; // cache from supabase
+
+  var miUbicacion = null; // { lat, lng }
+
+  function mapsLink(lat, lng) {
+    if (lat == null || lng == null) return '';
+    var url = 'https://www.google.com/maps/dir/?api=1&destination=' +
+      encodeURIComponent(Number(lat) + ',' + Number(lng)) + '&travelmode=driving';
+    if (miUbicacion) {
+      url += '&origin=' + encodeURIComponent(miUbicacion.lat + ',' + miUbicacion.lng);
+    }
+    return url;
+  }
+
+  /**
+   * Ruta tipo Google Maps: origen = mi ubicación (si hay),
+   * paradas = waypoints, último = destination.
+   * Google limita waypoints; partimos en tramos de 8.
+   */
+  function mapsLinkMulti(puntos) {
+    var con = (puntos || []).filter(function (p) {
+      return p.lat != null && p.lng != null && isFinite(Number(p.lat)) && isFinite(Number(p.lng));
+    });
+    if (!con.length) return '';
+    if (con.length === 1) return mapsLink(con[0].lat, con[0].lng);
+    var dest = con[con.length - 1];
+    var mids = con.slice(0, -1);
+    // máx ~8 waypoints en URL móvil
+    if (mids.length > 8) mids = mids.slice(0, 8);
+    var wps = mids.map(function (p) { return Number(p.lat) + ',' + Number(p.lng); }).join('|');
+    var url = 'https://www.google.com/maps/dir/?api=1&destination=' +
+      encodeURIComponent(Number(dest.lat) + ',' + Number(dest.lng)) +
+      (wps ? ('&waypoints=' + encodeURIComponent(wps)) : '') +
+      '&travelmode=driving';
+    if (miUbicacion) {
+      url += '&origin=' + encodeURIComponent(miUbicacion.lat + ',' + miUbicacion.lng);
+    }
+    return url;
+  }
+
+  function capturarMiUbicacion() {
+    var el = $('rutaGeoYo');
+    if (!navigator.geolocation) {
+      if (el) el.textContent = 'GPS no disponible en este dispositivo';
+      return Promise.resolve(null);
+    }
+    if (el) el.textContent = 'Obteniendo ubicación…';
+    return new Promise(function (resolve) {
+      navigator.geolocation.getCurrentPosition(
+        function (pos) {
+          miUbicacion = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          if (el) {
+            el.textContent = 'Origen: ' + miUbicacion.lat.toFixed(5) + ', ' + miUbicacion.lng.toFixed(5) +
+              ' (±' + Math.round(pos.coords.accuracy || 0) + ' m)';
+          }
+          resolve(miUbicacion);
+        },
+        function (err) {
+          console.warn(err);
+          if (el) el.textContent = 'No se pudo obtener GPS. Maps abrirá sin origen.';
+          resolve(null);
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+      );
+    });
+  }
+
+  async function cargarClientesGeo() {
+    if (!supabaseClient) return;
+    clientesGeo = [];
+    try {
+      var PAGE = 1000, from = 0, all = [];
+      for (;;) {
+        var res = await supabaseClient.from('clientes')
+          .select('codigo,nombre,direccion,latitud,longitud')
+          .range(from, from + PAGE - 1);
+        if (res.error) throw res.error;
+        if (!res.data || !res.data.length) break;
+        all = all.concat(res.data);
+        if (res.data.length < PAGE) break;
+        from += PAGE;
+        if (from > 60000) break;
+      }
+      clientesGeo = all;
+      // ubicaciones extra
+      try {
+        var u = await supabaseClient.from('clientes_ubicaciones')
+          .select('cliente_codigo,direccion,latitud,longitud,codigo_zona')
+          .limit(20000);
+        if (u.data) clientesGeo._ubs = u.data;
+      } catch (e2) { clientesGeo._ubs = []; }
+    } catch (e) {
+      console.warn('clientes geo', e);
+    }
+  }
+
+  function normTxt(s) {
+    return String(s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ').trim();
+  }
+
+  function matchClienteGeo(codigo, direccion) {
+    var cod = String(codigo || '').trim();
+    var dirN = normTxt(direccion);
+    var c = null;
+    for (var i = 0; i < clientesGeo.length; i++) {
+      if (String(clientesGeo[i].codigo || '').trim() === cod) { c = clientesGeo[i]; break; }
+    }
+    var lat = c && c.latitud != null ? Number(c.latitud) : null;
+    var lng = c && c.longitud != null ? Number(c.longitud) : null;
+    // buscar mejor match en ubicaciones por dirección
+    var ubs = clientesGeo._ubs || [];
+    var best = null;
+    for (var j = 0; j < ubs.length; j++) {
+      if (String(ubs[j].cliente_codigo || '').trim() !== cod) continue;
+      if (ubs[j].latitud == null || ubs[j].longitud == null) continue;
+      var ud = normTxt(ubs[j].direccion);
+      if (!dirN) { best = ubs[j]; break; }
+      if (ud && (ud.indexOf(dirN.slice(0, 20)) >= 0 || dirN.indexOf(ud.slice(0, 20)) >= 0)) {
+        best = ubs[j];
+        break;
+      }
+      if (!best) best = ubs[j];
+    }
+    if (best) {
+      lat = Number(best.latitud);
+      lng = Number(best.longitud);
+    }
+    return { lat: isFinite(lat) ? lat : null, lng: isFinite(lng) ? lng : null, nombreCat: c && c.nombre };
+  }
+
+  function filaLiquidacionAParada(row) {
+    var tipo = String(valRow(row, ['Tipo', 'tipo'])).toUpperCase();
+    // solo ventas con entrega (omitir notas crédito sin dirección útil si se desea)
+    var codCli = String(valRow(row, ['CodigoCliente', 'CódigoCliente', 'ClienteCodigo', 'Codigo Cliente'])).trim();
+    if (!codCli) return null;
+    var dir = String(valRow(row, ['DireccionEntrega', 'Direccion', 'Dirección', 'Direccion Entrega'])).trim();
+    var vend = String(valRow(row, ['CodigoVendedor', 'CódigoVendedor', 'VendedorCodigo'])).trim();
+    var camion = String(valRow(row, ['NombreVehiculo', 'Camion', 'Camión', 'Vehiculo'])).trim();
+    var latLng = matchClienteGeo(codCli, dir);
+    return {
+      vendedor: vend,
+      camion: camion,
+      placa: String(valRow(row, ['Placa', 'placa'])).trim(),
+      cliente: codCli,
+      nombre: String(valRow(row, ['NombreCliente', 'ClienteNombre', 'Nombre'])).trim() || (latLng.nombreCat || ''),
+      direccion: dir,
+      lat: latLng.lat,
+      lng: latLng.lng,
+      numCp: String(valRow(row, ['NumCp', 'NumCP', 'Documento'])).trim(),
+      saldo: Number(String(valRow(row, ['Saldo', 'saldo'])).replace(',', '.')) || 0,
+      fecha: String(valRow(row, ['Fecha', 'fecha'])).trim(),
+      consolidado: String(valRow(row, ['NumeroConsolidado', 'Consolidado'])).trim(),
+      tipo: tipo
+    };
+  }
+
+  function actualizarSelectRuta() {
+    var sel = $('rutaFiltro');
+    if (!sel) return;
+    var keys = {};
+    rutaParadas.forEach(function (p) {
+      var k = p.camion || 'SIN TRANSPORTE';
+      keys[k] = true;
+    });
+    var prev = sel.value;
+    sel.innerHTML = '<option value="">Todos los transportes</option>';
+    Object.keys(keys).sort().forEach(function (k) {
+      var n = rutaParadas.filter(function (p) { return (p.camion || 'SIN TRANSPORTE') === k; }).length;
+      var o = document.createElement('option');
+      o.value = k;
+      o.textContent = k + ' (' + n + ')';
+      sel.appendChild(o);
+    });
+    if (prev && keys[prev]) sel.value = prev;
+  }
+
+  function paradasFiltradas() {
+    var f = String(($('rutaFiltro') || {}).value || '');
+    if (!f) return rutaParadas.slice();
+    return rutaParadas.filter(function (p) {
+      return (p.camion || 'SIN TRANSPORTE') === f;
+    });
+  }
+
+  function renderRutaLista() {
+    var box = $('rutaList');
+    var st = $('rutaStats');
+    if (!box) return;
+    var list = paradasFiltradas();
+    // dedupe cliente+dir dentro del filtro para vista
+    var seen = Object.create(null);
+    var uniq = [];
+    list.forEach(function (p) {
+      var k = p.cliente + '|' + normTxt(p.direccion);
+      if (seen[k]) return;
+      seen[k] = true;
+      uniq.push(p);
+    });
+    var conGeo = uniq.filter(function (p) { return p.lat != null && p.lng != null; }).length;
+    if (st) {
+      st.textContent = uniq.length + ' paradas · ' + conGeo + ' con GPS · ' +
+        (uniq.length - conGeo) + ' sin ubicar';
+    }
+    if (!uniq.length) {
+      box.innerHTML = '<p class="cons-status">Sube el Excel de liquidación / cobranza del reparto.</p>';
+      return;
+    }
+    // agrupar por camión
+    var grupos = {};
+    uniq.forEach(function (p) {
+      var g = p.camion || 'SIN CAMIÓN';
+      if (!grupos[g]) grupos[g] = [];
+      grupos[g].push(p);
+    });
+    var html = '';
+    Object.keys(grupos).sort().forEach(function (g) {
+      var arr = grupos[g];
+      var linkAll = mapsLinkMulti(arr);
+      var placas = {};
+      arr.forEach(function (p) { if (p.placa) placas[p.placa] = true; });
+      var placaTxt = Object.keys(placas).join(', ');
+      html += '<div class="ruta-transport-head">' +
+        '<div><strong>🚛 ' + esc(g) + '</strong>' +
+        (placaTxt ? ' · Placa ' + esc(placaTxt) : '') +
+        '<div class="meta">' + arr.length + ' paradas' +
+        (miUbicacion ? ' · desde tu ubicación' : '') + '</div></div>' +
+        (linkAll
+          ? '<a class="btn btn-primary btn-sm maps-link" href="' + linkAll + '" target="_blank" rel="noopener">Maps este transporte</a>'
+          : '<span class="geo-miss">Sin GPS</span>') +
+        '</div>';
+      arr.forEach(function (p, idx) {
+        var geoCls = (p.lat != null) ? 'geo-ok' : 'geo-miss';
+        var geoTxt = (p.lat != null)
+          ? ('📍 ' + Number(p.lat).toFixed(5) + ', ' + Number(p.lng).toFixed(5))
+          : '⚠ Sin GPS en catálogo';
+        var one = mapsLink(p.lat, p.lng);
+        html += '<div class="ruta-card">' +
+          '<h4>' + (idx + 1) + '. ' + esc(p.nombre || p.cliente) + ' <span class="meta">(' + esc(p.cliente) + ')</span></h4>' +
+          '<div class="meta">' + esc(p.direccion || '—') + '</div>' +
+          '<div class="meta">Vend ' + esc(p.vendedor || '-') +
+          (p.placa ? ' · Placa ' + esc(p.placa) : '') +
+          (p.numCp ? ' · ' + esc(p.numCp) : '') + '</div>' +
+          '<div class="' + geoCls + '">' + geoTxt + '</div>' +
+          (one ? '<a class="maps-link" href="' + one + '" target="_blank" rel="noopener">Abrir en Google Maps</a>' : '') +
+          '</div>';
+      });
+    });
+    box.innerHTML = html;
+  }
+
+  async function importarLiquidacion(file) {
+    if (!file) return;
+    var st = $('rutaImportStatus');
+    if (st) st.textContent = 'Leyendo ' + file.name + '…';
+    if (!clientesGeo.length) await cargarClientesGeo();
+    try {
+      var buf = await file.arrayBuffer();
+      var wb = XLSX.read(buf, { type: 'array' });
+      var sheet = wb.Sheets[wb.SheetNames[0]];
+      var filas = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+      var out = [];
+      filas.forEach(function (row) {
+        var p = filaLiquidacionAParada(row);
+        if (!p) return;
+        // omitir notas de crédito sin dirección si no aportan ruta
+        if (/NOTA/.test(p.tipo || '') && !p.direccion) return;
+        out.push(p);
+      });
+      rutaParadas = out;
+      try {
+        localStorage.setItem('iem_ruta_reparto', JSON.stringify({
+          ts: Date.now(),
+          paradas: rutaParadas
+        }));
+      } catch (eL) {}
+      actualizarSelectRuta();
+      renderRutaLista();
+      if (st) st.textContent = 'Importadas ' + out.length + ' filas de ' + file.name;
+    } catch (e) {
+      console.error(e);
+      if (st) st.textContent = 'Error: ' + (e.message || e);
+    }
+  }
+
+  async function publicarRutaVendedores() {
+    if (!rutaParadas.length) {
+      alert('Primero importa el Excel de liquidación.');
+      return;
+    }
+    if (!supabaseClient) {
+      alert('Sin Supabase.');
+      return;
+    }
+    var st = $('rutaStats');
+    // dedupe paradas por cliente+dir+vendedor
+    var by = Object.create(null);
+    rutaParadas.forEach(function (p) {
+      var k = p.vendedor + '|' + p.cliente + '|' + normTxt(p.direccion);
+      by[k] = p;
+    });
+    var rows = Object.keys(by).map(function (k) {
+      var p = by[k];
+      var fecha = (p.fecha || '').slice(0, 10);
+      if (fecha && fecha.indexOf('/') >= 0) {
+        // dd/mm/yyyy?
+        var m = fecha.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        if (m) fecha = m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
+      }
+      if (!fecha || fecha.length < 8) {
+        try { fecha = ($('consFecha') || {}).value || new Date().toISOString().slice(0, 10); } catch (e) {
+          fecha = new Date().toISOString().slice(0, 10);
+        }
+      }
+      return {
+        fecha: fecha,
+        vendedor_codigo: p.vendedor || '',
+        camion: p.camion || null,
+        placa: p.placa || null,
+        cliente_codigo: p.cliente,
+        cliente_nombre: p.nombre || null,
+        direccion: p.direccion || null,
+        latitud: p.lat,
+        longitud: p.lng,
+        num_cp: p.numCp || null,
+        saldo: p.saldo || null,
+        consolidado: p.consolidado || null,
+        actualizado_en: new Date().toISOString()
+      };
+    });
+    if (st) st.textContent = 'Publicando ' + rows.length + ' paradas…';
+    // borrar ruta del mismo día+vendedor y reinsertar (simple)
+    var fechas = {};
+    rows.forEach(function (r) { fechas[r.fecha] = true; });
+    try {
+      for (var f in fechas) {
+        await supabaseClient.from('rutas_entrega').delete().eq('fecha', f);
+      }
+      var TAM = 100;
+      for (var i = 0; i < rows.length; i += TAM) {
+        var lote = rows.slice(i, i + TAM);
+        var res = await supabaseClient.from('rutas_entrega').insert(lote);
+        if (res.error) throw res.error;
+      }
+      if (st) st.textContent = '✅ Publicadas ' + rows.length + ' paradas. Los vendedores verán solo las suyas.';
+      alert('Ruta publicada. Cada vendedor verá sus clientes en la app de ventas.');
+    } catch (e) {
+      console.error(e);
+      var msg = (e && e.message) || String(e);
+      if (/relation.*does not exist|schema cache/i.test(msg)) {
+        alert('Falta crear la tabla. Ejecuta SQL_rutas_entrega.sql en Supabase.\n\n' + msg);
+      } else {
+        alert('Error al publicar: ' + msg);
+      }
+      if (st) st.textContent = 'Error: ' + msg;
+    }
+  }
+
+  function setMode(mode) {
+    var carga = mode === 'carga';
+    var pc = $('panelSideCarga');
+    var pr = $('panelSideRuta');
+    var mc = $('panelMainCarga');
+    var mr = $('panelMainRuta');
+    // show/hide carga blocks (camion select + pdf buttons are also carga)
+    document.querySelectorAll('.panel-carga').forEach(function (el) {
+      el.hidden = !carga;
+    });
+    // also hide camion + print if in ruta — they are sibling blocks without class
+    var camionLabel = null;
+    if (pr) pr.hidden = carga;
+    if (mc) mc.style.display = carga ? 'flex' : 'none';
+    if (mr) mr.hidden = carga;
+    var b1 = $('btnModeCarga');
+    var b2 = $('btnModeRuta');
+    if (b1) b1.classList.toggle('active', carga);
+    if (b2) b2.classList.toggle('active', !carga);
+    if (!carga) {
+      renderRutaLista();
+      if (!clientesGeo.length) cargarClientesGeo();
+    }
+  }
+
+  function bindRuta() {
+    if ($('btnModeCarga')) $('btnModeCarga').addEventListener('click', function () { setMode('carga'); });
+    if ($('btnModeRuta')) $('btnModeRuta').addEventListener('click', function () { setMode('ruta'); });
+    var rf = $('rutaFile');
+    if (rf) rf.addEventListener('change', function () {
+      if (rf.files && rf.files[0]) importarLiquidacion(rf.files[0]);
+      rf.value = '';
+    });
+    if ($('rutaFiltro')) $('rutaFiltro').addEventListener('change', renderRutaLista);
+    if ($('btnRutaPublicar')) $('btnRutaPublicar').addEventListener('click', publicarRutaVendedores);
+    if ($('btnRutaMiUbicacion')) {
+      $('btnRutaMiUbicacion').addEventListener('click', function () {
+        capturarMiUbicacion().then(function () { renderRutaLista(); });
+      });
+    }
+    if ($('btnRutaMaps')) $('btnRutaMaps').addEventListener('click', function () {
+      var go = function () {
+        var link = mapsLinkMulti(paradasFiltradas());
+        if (!link) { alert('No hay puntos con GPS en el filtro.'); return; }
+        window.open(link, '_blank', 'noopener');
+      };
+      if (!miUbicacion) {
+        capturarMiUbicacion().then(go);
+      } else go();
+    });
+    try {
+      var raw = localStorage.getItem('iem_ruta_reparto');
+      if (raw) {
+        var o = JSON.parse(raw);
+        if (o && Array.isArray(o.paradas)) {
+          rutaParadas = o.paradas;
+          actualizarSelectRuta();
+        }
+      }
+    } catch (e) {}
   }
 
   async function main() {

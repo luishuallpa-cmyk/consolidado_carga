@@ -199,14 +199,46 @@
       .cons-main { min-height: 70vh; }
       .cons-pdf-frame { min-height: 70vh; }
     }
+  
+    .cons-mode-tabs { display:flex; gap:.35rem; }
+    .mode-tab {
+      flex:1; cursor:pointer; border-radius:8px; border:1px solid var(--c-border);
+      background:transparent; color:var(--c-muted); padding:.4rem .35rem; font-size:.75rem; font-weight:600;
+    }
+    .mode-tab.active { background:var(--c-pri); border-color:var(--c-pri); color:#fff; }
+    .ruta-list { display:flex; flex-direction:column; gap:.6rem; max-width:900px; margin:0 auto; }
+    .ruta-card {
+      background:var(--c-card); border:1px solid var(--c-border); border-radius:12px; padding:.75rem .9rem;
+    }
+    .ruta-card h4 { margin:0 0 .35rem; font-size:.95rem; }
+    .ruta-card .meta { font-size:.78rem; color:var(--c-muted); }
+    .ruta-card .geo-ok { color:#4ade80; }
+    .ruta-card .geo-miss { color:#fbbf24; }
+    .ruta-card a.maps-link {
+      display:inline-block; margin-top:.4rem; font-size:.82rem; color:#38bdf8; text-decoration:none; font-weight:600;
+    }
+    .ruta-transport-head {
+      display:flex; align-items:center; justify-content:space-between; gap:.75rem; flex-wrap:wrap;
+      background:var(--c-card); border:1px solid var(--c-border); border-radius:12px;
+      padding:.65rem .85rem; margin:1rem 0 .5rem;
+    }
+    .ruta-transport-head .meta { font-size:.75rem; color:var(--c-muted); margin-top:.15rem; }
+    .ruta-group-title {
+      font-size:.8rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+      color:var(--c-muted); margin:1rem 0 .4rem;
+    }
   </style>
 </head>
 <body class="cons-page">
   <div class="cons-layout">
     <aside class="cons-sidebar no-print">
       <div class="cons-side-head">
-        <h1>📦 Carga</h1>
+        <h1>📦 IEM Logística</h1>
         <div class="cons-status" id="consStatus" hidden></div>
+      </div>
+      <div class="cons-mode-tabs">
+        <button type="button" class="mode-tab active" id="btnModeCarga" data-mode="carga">Carga PDF</button>
+        <button type="button" class="mode-tab" id="btnModeRuta" data-mode="ruta">Ruta / Geo</button>
       </div>
 
       <div class="cons-side-block">
@@ -216,9 +248,9 @@
         <input type="hidden" id="consFecha" />
       </div>
 
-      <div class="cons-side-block">
+      <div class="cons-side-block panel-carga" id="panelSideCarga">
         <label class="btn btn-primary btn-sm" style="cursor:pointer;width:100%;text-align:center;box-sizing:border-box">
-          Excel del día
+          Excel de carga
           <input type="file" id="consFile" accept=".xlsx,.xls,.xlsm,.csv" multiple hidden />
         </label>
         <label class="btn btn-outline btn-sm" style="cursor:pointer;width:100%;text-align:center;box-sizing:border-box;margin-top:.35rem">
@@ -229,7 +261,7 @@
         <p class="cons-status" id="consImportStatus" hidden></p>
       </div>
 
-      <div class="cons-side-block">
+      <div class="cons-side-block panel-carga">
         <label style="font-size:.78rem;color:var(--c-muted)">Camión</label>
         <select id="consCamion" style="width:100%;margin-top:.25rem">
           <option value="">Todos</option>
@@ -244,10 +276,27 @@
         </select>
       </div>
 
-      <div class="cons-side-block">
+      <div class="cons-side-block panel-carga">
         <button type="button" class="btn btn-primary btn-sm" id="btnConsPrintUno" style="width:100%">PDF camión</button>
         <button type="button" class="btn btn-primary btn-sm" id="btnConsPrintMulti" style="width:100%;margin-top:.35rem">PDF todos</button>
         <button type="button" class="btn btn-outline btn-sm" id="btnConsTema" style="width:100%;margin-top:.35rem">Tema</button>
+      </div>
+
+      <div class="cons-side-block panel-ruta" id="panelSideRuta" hidden>
+        <label class="btn btn-primary btn-sm" style="cursor:pointer;width:100%;text-align:center;box-sizing:border-box">
+          Liquidación / reparto
+          <input type="file" id="rutaFile" accept=".xlsx,.xls,.xlsm,.csv" hidden />
+        </label>
+        <p class="cons-status" id="rutaImportStatus" style="font-size:.72rem;margin-top:.4rem">Excel cobranzas (CódigoCliente, Dirección, Camión, Vendedor)</p>
+        <label style="font-size:.78rem;color:var(--c-muted);margin-top:.5rem">Transporte</label>
+        <select id="rutaFiltro" style="width:100%;margin-top:.25rem">
+          <option value="">Todos los transportes</option>
+        </select>
+        <button type="button" class="btn btn-outline btn-sm" id="btnRutaMiUbicacion" style="width:100%;margin-top:.5rem">📍 Usar mi ubicación</button>
+        <p class="cons-status" id="rutaGeoYo" style="font-size:.7rem;margin-top:.25rem">Origen: aún no capturado</p>
+        <button type="button" class="btn btn-primary btn-sm" id="btnRutaMaps" style="width:100%;margin-top:.45rem">Maps · transporte elegido</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btnRutaPublicar" style="width:100%;margin-top:.35rem">Publicar a vendedores</button>
+        <p class="cons-status" id="rutaStats" style="font-size:.72rem;margin-top:.4rem"></p>
       </div>
 
       <p class="cons-status" id="consResumen" hidden></p>
@@ -255,7 +304,12 @@
     </aside>
 
     <main class="cons-main">
-      <iframe id="consPdfFrame" title="Vista previa PDF" class="cons-pdf-frame"></iframe>
+      <div id="panelMainCarga" style="flex:1;display:flex;flex-direction:column;min-height:0">
+        <iframe id="consPdfFrame" title="Vista previa PDF" class="cons-pdf-frame"></iframe>
+      </div>
+      <div id="panelMainRuta" hidden style="flex:1;overflow:auto;padding:1rem;background:var(--c-bg)">
+        <div id="rutaList" class="ruta-list"></div>
+      </div>
     </main>
   </div>
 
