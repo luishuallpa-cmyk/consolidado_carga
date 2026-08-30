@@ -1531,12 +1531,12 @@
   }
 
   async function cargarClientesGeo() {
-    if (!supabaseClient) return;
+    if (!supabase) return;
     clientesGeo = [];
     try {
       var PAGE = 1000, from = 0, all = [];
       for (;;) {
-        var res = await supabaseClient.from('clientes')
+        var res = await supabase.from('clientes')
           .select('codigo,nombre,direccion,latitud,longitud')
           .range(from, from + PAGE - 1);
         if (res.error) throw res.error;
@@ -1549,7 +1549,7 @@
       clientesGeo = all;
       // ubicaciones extra
       try {
-        var u = await supabaseClient.from('clientes_ubicaciones')
+        var u = await supabase.from('clientes_ubicaciones')
           .select('cliente_codigo,direccion,latitud,longitud,codigo_zona')
           .limit(20000);
         if (u.data) clientesGeo._ubs = u.data;
@@ -1888,7 +1888,7 @@
       alert('Primero importa el Excel de liquidación.');
       return;
     }
-    if (!supabaseClient) {
+    if (!supabase) {
       alert('Sin Supabase.');
       return;
     }
@@ -1934,12 +1934,12 @@
     rows.forEach(function (r) { fechas[r.fecha] = true; });
     try {
       for (var f in fechas) {
-        await supabaseClient.from('rutas_entrega').delete().eq('fecha', f);
+        await supabase.from('rutas_entrega').delete().eq('fecha', f);
       }
       var TAM = 100;
       for (var i = 0; i < rows.length; i += TAM) {
         var lote = rows.slice(i, i + TAM);
-        var res = await supabaseClient.from('rutas_entrega').insert(lote);
+        var res = await supabase.from('rutas_entrega').insert(lote);
         if (res.error) throw res.error;
       }
       if (st) st.textContent = '✅ Publicadas ' + rows.length + ' paradas. Los vendedores verán solo las suyas.';
