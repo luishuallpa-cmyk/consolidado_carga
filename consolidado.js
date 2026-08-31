@@ -597,7 +597,7 @@
 
     var els = Array.prototype.slice.call(pages);
     els.forEach(function (el) {
-      // Caja A4 fija: contenido compacto para no cortar tablas
+      // Caja A4 fija + flex: pie siempre abajo
       el.style.cssText = [
         'width:' + PAGE_W + 'px',
         'height:' + PAGE_H + 'px',
@@ -611,8 +611,23 @@
         'color:#0f172a',
         'font-family:Segoe UI,Arial,sans-serif',
         'font-size:9.5px',
-        'line-height:1.15'
+        'line-height:1.15',
+        'display:flex',
+        'flex-direction:column'
       ].join(';');
+      var body = el.querySelector('.print-body');
+      if (body) {
+        body.style.flex = '1 1 auto';
+        body.style.minHeight = '0';
+        body.style.overflow = 'hidden';
+      }
+      var foot = el.querySelector('.print-footer');
+      if (foot) {
+        foot.style.flex = '0 0 auto';
+        foot.style.marginTop = 'auto';
+      }
+      var head = el.querySelector('.print-header');
+      if (head) head.style.flex = '0 0 auto';
       // Compactar tablas internas (más filas por hoja)
       el.querySelectorAll('table').forEach(function (tb) {
         tb.style.fontSize = '9px';
@@ -941,8 +956,8 @@
 
   /** Ítems por hoja (A4 con cabecera IEM + grupos). Más denso = menos páginas vacías. */
   // Capacidad: fila=1, header categoría≈1, banner FRIOS/SECOS≈1
-  var UNIDADES_POR_HOJA = 54;
-  var ITEMS_POR_HOJA = 36; // tope de filas de producto por página
+  var UNIDADES_POR_HOJA = 64;
+  var ITEMS_POR_HOJA = 44; // más filas = menos hueco
 
   function pesoVisualFila(it, prevTipo, prevCat) {
     var u = 1;
@@ -1014,7 +1029,7 @@
     if (pages.length >= 2) {
       var last = pages[pages.length - 1];
       var prev = pages[pages.length - 2];
-      if (last.rows.length <= 6 && prev.rows.length + last.rows.length <= ITEMS_POR_HOJA) {
+      if (last.rows.length <= 10 && prev.rows.length + last.rows.length <= ITEMS_POR_HOJA) {
         prev.rows = prev.rows.concat(last.rows);
         prev.esUltima = true;
         pages.pop();
@@ -1126,14 +1141,17 @@
 
     // page-break-after solo si no es la última hoja del documento se controla fuera;
     // cada print-page siempre puede romper después
+    // Hoja A4 fija: cabecera + cuerpo (crece) + pie SIEMPRE abajo
     return '<div class="print-page" data-camion="' + esc(camion || '') + '" data-hoja="' + numHoja +
-      '" data-total="' + totalHojas + '" style="page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid;' +
+      '" data-total="' + totalHojas + '" style="page-break-after:always;break-after:page;' +
       'font-family:Segoe UI,Arial,sans-serif;color:#0f172a;background:#fff;box-sizing:border-box;' +
-      'width:190mm;min-height:270mm;max-height:270mm;overflow:hidden;padding:0;margin:0 auto 12px auto;' +
+      'width:190mm;height:277mm;min-height:277mm;max-height:277mm;overflow:hidden;' +
+      'padding:0;margin:0 auto 12px auto;' +
+      'display:flex;flex-direction:column;' +
       '-webkit-print-color-adjust:exact;print-color-adjust:exact;">' +
-      '<div class="print-header" style="display:flex;align-items:center;gap:14px;border-bottom:3px solid #1d4ed8;' +
-      'padding-bottom:10px;margin-bottom:12px;page-break-after:avoid;">' +
-        '<img src="' + LOGO_URL + '" alt="IEM" style="height:40px;width:auto;object-fit:contain;" onerror="this.style.display=\'none\'" />' +
+      '<div class="print-header" style="flex:0 0 auto;display:flex;align-items:center;gap:14px;border-bottom:3px solid #1d4ed8;' +
+      'padding-bottom:8px;margin-bottom:8px;">' +
+        '<img src="' + LOGO_URL + '" alt="IEM" style="height:40px;width:auto;object-fit:contain;" onerror="this.style.display='none'" />' +
         '<div style="flex:1;">' +
           '<div style="font-size:11.5pt;font-weight:800;color:#1e3a5f;">' + esc(tituloFijo) + badgeHoja + '</div>' +
           '<div style="margin-top:6px;font-size:10pt;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">' +
@@ -1142,10 +1160,16 @@
           '</div>' +
         '</div>' +
       '</div>' +
-      body.html +
-      bloqueTotal +
-      '<div style="margin-top:14px;padding-top:8px;border-top:2px solid #1d4ed8;font-size:9pt;color:#475569;' +
-      'display:flex;justify-content:space-between;gap:8px;page-break-inside:avoid;">' +
+      '<div class="print-body" style="flex:1 1 auto;min-height:0;overflow:hidden;">' +
+        body.html +
+        (esUltimaHojaCamion ? '' : (
+          '<div style="margin-top:8px;font-size:9pt;color:#64748b;text-align:right;">… continúa en hoja ' +
+          (numHoja + 1) + ' de ' + totalHojas + ' · ' + esc(camion || '') + '</div>'
+        )) +
+        (esUltimaHojaCamion ? bloqueTotal : '') +
+      '</div>' +
+      '<div class="print-footer" style="flex:0 0 auto;margin-top:auto;padding-top:8px;border-top:2px solid #1d4ed8;' +
+      'font-size:9pt;color:#475569;display:flex;justify-content:space-between;gap:8px;align-items:center;">' +
         '<span>IEM Group · Consolidado de carga · ' + esc(camion || '') + '</span>' +
         '<span style="font-weight:700;">' + textoHoja + '</span>' +
       '</div>' +
