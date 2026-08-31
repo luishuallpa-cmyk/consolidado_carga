@@ -590,7 +590,7 @@
      */
     var PAGE_W = 794;
     var PAGE_H = 1123;
-    var PAD = 22; // ~6 mm
+    var PAD = 16; // ~4.2 mm — más área útil
 
     host.style.cssText = 'position:fixed;left:0;top:0;width:' + PAGE_W +
       'px;background:#fff;z-index:-1;opacity:0.01;pointer-events:none;overflow:visible;';
@@ -610,31 +610,40 @@
         'background:#ffffff',
         'color:#0f172a',
         'font-family:Segoe UI,Arial,sans-serif',
-        'font-size:10px',
-        'line-height:1.2'
+        'font-size:9.5px',
+        'line-height:1.15'
       ].join(';');
-      // Compactar tablas internas
+      // Compactar tablas internas (más filas por hoja)
       el.querySelectorAll('table').forEach(function (tb) {
-        tb.style.fontSize = '9.5px';
+        tb.style.fontSize = '9px';
         tb.style.borderCollapse = 'collapse';
         tb.style.width = '100%';
       });
       el.querySelectorAll('th,td').forEach(function (c) {
-        c.style.padding = '2px 3px';
+        c.style.padding = '1.5px 3px';
       });
       el.querySelectorAll('.print-header').forEach(function (h) {
-        h.style.marginBottom = '8px';
-        h.style.paddingBottom = '6px';
+        h.style.marginBottom = '5px';
+        h.style.paddingBottom = '4px';
       });
       el.querySelectorAll('img').forEach(function (img) {
-        img.style.height = '40px';
+        img.style.height = '34px';
+      });
+      el.querySelectorAll('.blk-tipo').forEach(function (b) {
+        b.style.margin = '4px 0 2px';
+        b.style.padding = '3px 7px';
+        b.style.fontSize = '9pt';
       });
     });
 
-    // scale 1 = 1 CSS px → 1 canvas px (predecible). 1.5 si se quiere más nitidez.
-    var SCALE = 1.5;
-    var canvases = await Promise.all(els.map(function (el) {
-      return html2canvas(el, {
+    // Escala baja = mucho más rápido (html2canvas es el cuello de botella).
+    // 1.15 ≈ legible en pantalla/impresión; 1.5 era ~70% más lento y 2.25× más píxeles.
+    var SCALE = 1.15;
+    var pdf = new Jspdf({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+    // Secuencial: menos pico de memoria y UI más estable que Promise.all de N páginas
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      var canvas = await html2canvas(el, {
         scale: SCALE,
         width: PAGE_W,
         height: PAGE_H,
@@ -648,19 +657,20 @@
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
-        imageTimeout: 2500,
+        imageTimeout: 1500,
         removeContainer: true
       });
-    }));
-
-    var pdf = new Jspdf({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
-    for (var i = 0; i < canvases.length; i++) {
-      var canvas = canvases[i];
       if (!canvas || !canvas.width) continue;
-      // Ocupa toda la página A4 (márgenes ya van en el HTML)
-      var img = canvas.toDataURL('image/jpeg', 0.82);
+      var img = canvas.toDataURL('image/jpeg', 0.72);
       if (i > 0) pdf.addPage();
       pdf.addImage(img, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+      // Liberar canvas cuanto antes
+      try {
+        var ctx = canvas.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      } catch (eClr) {}
+      canvas.width = 0;
+      canvas.height = 0;
     }
 
     revokePdfUrl();
@@ -723,12 +733,35 @@
     var camSel = String(($('consCamion') || {}).value || '').trim();
     if (res) { res.textContent = ""; }
 
-    // Generar PDF real para el iframe (asíncrono)
+    // Generar PDF (debounced): evita re-renders si el usuario cambia camión rápido
     setPdfStatus('Preparando PDF…');
-    generarPdfDesdeHojas(null, false).catch(function (e) {
-      console.error(e);
-      setPdfStatus('No se pudo generar PDF: ' + ((e && e.message) || e) + ' — revisa CDN/internet');
-    });
+    schedulePdfPreview();
+  }
+
+  var _pdfPreviewTimer = null;
+  var _pdfGenToken = 0;
+  var _pdfBusy = false;
+
+  function schedulePdfPreview() {
+    if (_pdfPreviewTimer) clearTimeout(_pdfPreviewTimer);
+    _pdfPreviewTimer = setTimeout(function () {
+      _pdfPreviewTimer = null;
+      var token = ++_pdfGenToken;
+      if (_pdfBusy) {
+        // reintentar cuando termine el actual
+        setTimeout(function () {
+          if (token === _pdfGenToken) schedulePdfPreview();
+        }, 200);
+        return;
+      }
+      _pdfBusy = true;
+      generarPdfDesdeHojas(null, false).catch(function (e) {
+        console.error(e);
+        setPdfStatus('No se pudo generar PDF: ' + ((e && e.message) || e) + ' — revisa CDN/internet');
+      }).then(function () {
+        _pdfBusy = false;
+      });
+    }, 180);
   }
 
 
@@ -906,10 +939,10 @@
     return (Math.round(n * 100) / 100).toFixed(2);
   }
 
-  /** Ítems por hoja (A4 con cabecera IEM + grupos). Ajuste fino si hace falta. */
-  // Capacidad por hoja (unidades): fila=1, header categoría=2, banner FRIOS/SECOS=2
-  var UNIDADES_POR_HOJA = 40;
-  var ITEMS_POR_HOJA = 24; // tope de filas (headers consumen cupo)
+  /** Ítems por hoja (A4 con cabecera IEM + grupos). Más denso = menos páginas vacías. */
+  // Capacidad: fila=1, header categoría≈1, banner FRIOS/SECOS≈1
+  var UNIDADES_POR_HOJA = 54;
+  var ITEMS_POR_HOJA = 36; // tope de filas de producto por página
 
   function pesoVisualFila(it, prevTipo, prevCat) {
     var u = 1;
@@ -958,6 +991,7 @@
       var tipo = r.tipoKey;
       var cat = r.categoria;
       var need = 1;
+      // headers compactos: solo +1 por cambio (antes +1/+2 dejaba huecos grandes)
       if (tipo && tipo !== prevTipo) need += 1;
       if (cat && cat !== prevCat) need += 1;
       if (cur.length && (units + need > UNIDADES_POR_HOJA || cur.length >= ITEMS_POR_HOJA)) {
@@ -976,10 +1010,11 @@
     if (cur.length) pages.push({ rows: cur, pesoTotalCamion: pesoTotal, esUltima: false });
     if (!pages.length) pages.push({ rows: [], pesoTotalCamion: pesoTotal, esUltima: true });
     pages.forEach(function (pg, idx) { pg.esUltima = idx === pages.length - 1; });
+    // Fusionar última página corta (hasta 6 filas) con la anterior si cabe
     if (pages.length >= 2) {
       var last = pages[pages.length - 1];
       var prev = pages[pages.length - 2];
-      if (last.rows.length <= 2 && prev.rows.length + last.rows.length <= ITEMS_POR_HOJA + 2) {
+      if (last.rows.length <= 6 && prev.rows.length + last.rows.length <= ITEMS_POR_HOJA) {
         prev.rows = prev.rows.concat(last.rows);
         prev.esUltima = true;
         pages.pop();
