@@ -2531,7 +2531,7 @@
     var rs = $('rutaStats');
     if (rs && carga) rs.textContent = '';
     var title = $('consSideTitle');
-    if (title) title.textContent = carga ? 'Carga / PDF' : 'Mapa / Ruta';
+    if (title) title.textContent = carga ? 'Consolidado' : 'Rutas';
     try { localStorage.setItem('iem_cons_mode', carga ? 'carga' : 'ruta'); } catch (e) {}
     console.log('[IEM] body classes', document.body.className);
     if (!carga) {
