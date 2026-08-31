@@ -1957,54 +1957,181 @@
   }
 
 
+  var _rutaLeafletMap = null;
+  var _rutaLeafletLayer = null;
+  var _rutaLeafletMarkers = [];
+
+  var CAMION_COLORS = {
+    'CAMION 102': '#ef4444',
+    'CAMION 103': '#3b82f6',
+    'CAMION 104': '#22c55e',
+    'CAMION 105': '#a855f7',
+    'CAMION 106': '#f97316',
+    'CAMION 107': '#b91c1c',
+    'CAMION 109': '#0e7490',
+    'SIN CAMIÓN': '#64748b',
+    'SIN TRANSPORTE': '#64748b'
+  };
+  var CAMION_COLOR_FALLBACK = ['#e11d48', '#2563eb', '#16a34a', '#9333ea', '#ea580c', '#0891b2', '#ca8a04', '#db2777', '#4f46e5'];
+
+  function colorCamion(camion) {
+    var k = String(camion || 'SIN CAMIÓN');
+    if (CAMION_COLORS[k]) return CAMION_COLORS[k];
+    // hash estable
+    var h = 0;
+    for (var i = 0; i < k.length; i++) h = ((h << 5) - h) + k.charCodeAt(i);
+    return CAMION_COLOR_FALLBACK[Math.abs(h) % CAMION_COLOR_FALLBACK.length];
+  }
+
+  function markerIcon(color) {
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40">' +
+      '<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="' + color + '" stroke="#fff" stroke-width="1.5"/>' +
+      '<circle cx="14" cy="14" r="5.5" fill="#fff"/></svg>';
+    return L.divIcon({
+      className: 'ruta-pin',
+      html: svg,
+      iconSize: [28, 40],
+      iconAnchor: [14, 40],
+      popupAnchor: [0, -36]
+    });
+  }
+
   function actualizarMapaRuta() {
-    var frame = $('rutaMapFrame');
     var wrap = $('rutaMapWrap');
     var hint = $('rutaMapHint');
-    if (!frame) return;
+    var el = $('rutaMap');
+    var legend = $('rutaMapLegend');
+    if (!el) return;
+
+    if (typeof L === 'undefined') {
+      if (hint) {
+        hint.style.display = '';
+        hint.textContent = 'Mapa no disponible (Leaflet no cargó). Recarga la página.';
+      }
+      return;
+    }
+
     var list = paradasFiltradas();
     var seen = Object.create(null);
     var pts = [];
+    var countsByTruck = Object.create(null);
+
     list.forEach(function (p) {
       if (p.lat == null || p.lng == null) return;
-      var k = Number(p.lat).toFixed(5) + ',' + Number(p.lng).toFixed(5);
+      if (!isFinite(Number(p.lat)) || !isFinite(Number(p.lng))) return;
+      var k = Number(p.lat).toFixed(5) + ',' + Number(p.lng).toFixed(5) + '|' + String(p.cliente || '') + '|' + String(p.camion || '');
       if (seen[k]) return;
       seen[k] = true;
-      pts.push({ lat: Number(p.lat), lng: Number(p.lng), nom: p.nombre || p.cliente });
+      var camion = p.camion || 'SIN CAMIÓN';
+      countsByTruck[camion] = (countsByTruck[camion] || 0) + 1;
+      pts.push({
+        lat: Number(p.lat),
+        lng: Number(p.lng),
+        nom: p.nombre || p.cliente || '',
+        cliente: p.cliente || '',
+        direccion: p.direccion || '',
+        camion: camion,
+        placa: p.placa || '',
+        vendedor: p.vendedor || '',
+        saldo: p.saldo,
+        numCp: p.numCp || ''
+      });
     });
+
     if (!pts.length) {
-      frame.src = 'about:blank';
+      if (_rutaLeafletMap) {
+        if (_rutaLeafletLayer) {
+          _rutaLeafletLayer.clearLayers();
+        }
+      }
       if (wrap) wrap.classList.remove('has-map');
       if (hint) {
         hint.style.display = '';
         hint.textContent = rutaParadas.length
-          ? 'Hay paradas pero sin GPS en catálogo. Actualiza clientes con lat/long.'
-          : '1) Pestaña Ruta/Geo  2) Sube Liquidación  3) Elige transporte  4) Maps';
+          ? 'Hay paradas pero sin GPS en catálogo. Verifica lat/long en clientes (Supabase).'
+          : '1) Sube Liquidación de reparto  2) Elige transporte  3) Verás el mapa';
       }
+      if (legend) { legend.hidden = true; legend.innerHTML = ''; }
       return;
     }
-    // OpenStreetMap embed centrado en el promedio (sin API key)
-    var lat = 0, lng = 0;
-    pts.forEach(function (p) { lat += p.lat; lng += p.lng; });
-    lat /= pts.length;
-    lng /= pts.length;
-    var pad = 0.08;
-    var minLat = lat, maxLat = lat, minLng = lng, maxLng = lng;
-    pts.forEach(function (p) {
-      if (p.lat < minLat) minLat = p.lat;
-      if (p.lat > maxLat) maxLat = p.lat;
-      if (p.lng < minLng) minLng = p.lng;
-      if (p.lng > maxLng) maxLng = p.lng;
-    });
-    minLat -= pad; maxLat += pad; minLng -= pad; maxLng += pad;
-    // marker del primer punto + bbox
-    var bbox = minLng + '%2C' + minLat + '%2C' + maxLng + '%2C' + maxLat;
-    var marker = pts[0].lat + '%2C' + pts[0].lng;
-    frame.src = 'https://www.openstreetmap.org/export/embed.html?bbox=' + bbox +
-      '&layer=mapnik&marker=' + marker;
+
     if (wrap) wrap.classList.add('has-map');
     if (hint) hint.style.display = 'none';
+
+    // init map once
+    if (!_rutaLeafletMap) {
+      _rutaLeafletMap = L.map(el, {
+        zoomControl: true,
+        attributionControl: true
+      });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(_rutaLeafletMap);
+      _rutaLeafletLayer = L.layerGroup().addTo(_rutaLeafletMap);
+      // fix size after panel shown
+      setTimeout(function () { try { _rutaLeafletMap.invalidateSize(); } catch (e) {} }, 120);
+    } else {
+      setTimeout(function () { try { _rutaLeafletMap.invalidateSize(); } catch (e) {} }, 60);
+    }
+
+    _rutaLeafletLayer.clearLayers();
+    _rutaLeafletMarkers = [];
+
+    var bounds = [];
+    pts.forEach(function (p) {
+      var color = colorCamion(p.camion);
+      var saldoTxt = (p.saldo != null && isFinite(Number(p.saldo)))
+        ? ('S/ ' + Number(p.saldo).toFixed(2))
+        : '—';
+      var popup =
+        '<div style="min-width:180px;max-width:260px;font-family:system-ui,sans-serif">' +
+        '<b>' + esc(p.nom) + '</b><br>' +
+        '<span style="color:#64748b">Código: ' + esc(p.cliente) + '</span><br>' +
+        '<hr style="margin:6px 0;border:none;border-top:1px solid #e2e8f0">' +
+        '<b>Camión:</b> ' + esc(p.camion) +
+        (p.placa ? ' (' + esc(p.placa) + ')' : '') + '<br>' +
+        (p.vendedor ? '<b>Vendedor:</b> ' + esc(p.vendedor) + '<br>' : '') +
+        '<b>Saldo:</b> ' + saldoTxt + '<br>' +
+        (p.numCp ? '<b>Doc:</b> ' + esc(p.numCp) + '<br>' : '') +
+        '<b>Dirección:</b><br><small>' + esc(p.direccion || '—') + '</small><br>' +
+        '<small style="color:#94a3b8">' + p.lat.toFixed(6) + ', ' + p.lng.toFixed(6) + '</small>' +
+        '</div>';
+      var m = L.marker([p.lat, p.lng], { icon: markerIcon(color) })
+        .bindPopup(popup)
+        .bindTooltip(p.camion + ': ' + (p.nom || p.cliente).slice(0, 36), {
+          direction: 'top',
+          offset: [0, -30],
+          opacity: 0.9
+        });
+      m.addTo(_rutaLeafletLayer);
+      _rutaLeafletMarkers.push(m);
+      bounds.push([p.lat, p.lng]);
+    });
+
+    try {
+      if (bounds.length === 1) {
+        _rutaLeafletMap.setView(bounds[0], 15);
+      } else {
+        _rutaLeafletMap.fitBounds(bounds, { padding: [36, 36], maxZoom: 15 });
+      }
+    } catch (eFit) {
+      console.warn('[IEM] fitBounds', eFit);
+    }
+
+    // leyenda por camión
+    if (legend) {
+      var keys = Object.keys(countsByTruck).sort();
+      var htmlLeg = '<b>Camiones · ' + pts.length + ' pts</b>';
+      keys.forEach(function (k) {
+        htmlLeg += '<div class="leg-row"><span class="leg-dot" style="background:' +
+          colorCamion(k) + '"></span>' + esc(k) + ' (' + countsByTruck[k] + ')</div>';
+      });
+      legend.innerHTML = htmlLeg;
+      legend.hidden = false;
+    }
   }
+
 
   function mostrarChooser() {
     console.log('[IEM] mostrarChooser()');
@@ -2059,6 +2186,9 @@
     if (!carga) {
       renderRutaLista();
       try { actualizarMapaRuta(); } catch (eM) { console.warn('[IEM] mapa', eM); }
+      setTimeout(function () {
+        try { if (_rutaLeafletMap) _rutaLeafletMap.invalidateSize(); } catch (eZ) {}
+      }, 200);
       if (!clientesGeo.length) cargarClientesGeo();
     } else {
       // UI primero; PDF en el siguiente tick (menos demora al entrar)
