@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
-  <link rel="icon" href="favicon-32.png" sizes="32x32" />
+  <link rel="icon" href="logo-iem.png" sizes="32x32" />
   <style>
     :root { --c-bg:#0f172a; --c-card:#1e293b; --c-border:#334155; --c-text:#f1f5f9; --c-muted:#94a3b8; --c-pri:#3B6EA5; --c-ok:#16a34a; --c-bad:#dc2626; }
     body.cons-page { margin:0; background:var(--c-bg); color:var(--c-text); font-family:system-ui,-apple-system,sans-serif; min-height:100vh; }
@@ -293,6 +293,48 @@
     }
     .ruta-map-wrap.has-map .ruta-map-hint { display: none; }
 
+    .chooser-logo {
+      height: 72px; width: auto; max-width: 160px; object-fit: contain;
+      display: block; margin: 0 auto 0.35rem;
+      filter: drop-shadow(0 2px 8px rgba(0,0,0,.25));
+    }
+    .chooser-brand { text-align: center; }
+    .chooser-brand h1 { margin: 0.15rem 0 0.85rem; font-size: 1.4rem; letter-spacing: 0.02em; }
+    .chooser-opt {
+      min-height: 120px; justify-content: center; gap: 0.35rem;
+    }
+    .side-brand {
+      display: flex; align-items: center; gap: 0.65rem; margin-bottom: 0.55rem;
+    }
+    .side-logo {
+      height: 40px; width: auto; max-width: 56px; object-fit: contain; flex-shrink: 0;
+    }
+    .side-brand-name {
+      font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em;
+      color: var(--c-muted); text-transform: uppercase;
+    }
+    .cons-side-head h1 {
+      margin: 0; font-size: 1.05rem; font-weight: 700;
+    }
+    .step-label {
+      display: flex; align-items: center; gap: 0.45rem;
+      font-size: 0.78rem; font-weight: 700; color: var(--c-muted);
+      margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .step-n {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 1.35rem; height: 1.35rem; border-radius: 999px;
+      background: var(--c-pri); color: #fff; font-size: 0.75rem; font-weight: 800;
+    }
+    .cons-sidebar .btn {
+      font-size: 0.9rem;
+    }
+    .cons-sidebar select {
+      border-radius: 10px; border: 1px solid var(--c-border);
+      background: var(--c-bg); color: var(--c-text); font: inherit;
+    }
+
+
     /* Panel Google Maps: tramos + elegir parada */
     #rutaMapsOverlay {
       display: none; position: fixed; inset: 0; z-index: 9999;
@@ -373,7 +415,7 @@
     }
     .chooser-brand h1 { margin: 0.5rem 0 0.25rem; font-size: 1.35rem; }
     .chooser-brand p { margin: 0 0 1.25rem; color: var(--c-muted); font-size: 0.92rem; }
-    .chooser-logo { height: 52px; width: auto; object-fit: contain; }
+    .chooser-logo { height: 72px; width: auto; object-fit: contain; }
     .chooser-grid {
       display: grid;
       grid-template-columns: 1fr;
@@ -450,57 +492,64 @@
   <div id="consChooser" class="cons-chooser">
     <div class="chooser-card">
       <div class="chooser-brand">
-        <img src="logo-iem.png" alt="IEM" class="chooser-logo" onerror="this.style.display='none'" />
+        <img src="logo-iem.png" alt="IEM Group" class="chooser-logo" width="120" height="72"
+          onerror="this.onerror=null;this.src='8y7D7.png'" />
         <h1>IEM Logística</h1>
-        <p>Elige qué quieres hacer</p>
       </div>
       <div class="chooser-grid">
         <button type="button" class="chooser-opt" id="chooserCarga" data-go="carga">
           <span class="chooser-ico">📄</span>
-          <span class="chooser-title">Consolidado de carga</span>
-          <span class="chooser-desc">Importar Excel del día, armar hojas por camión e imprimir / PDF</span>
+          <span class="chooser-title">Carga / PDF</span>
+          <span class="chooser-desc">Excel → hojas por camión</span>
         </button>
         <button type="button" class="chooser-opt" id="chooserRuta" data-go="ruta">
           <span class="chooser-ico">📍</span>
-          <span class="chooser-title">Geolocalización / Ruta</span>
-          <span class="chooser-desc">Liquidación de reparto, mapa por transporte y links para vendedores</span>
+          <span class="chooser-title">Mapa / Ruta</span>
+          <span class="chooser-desc">Paradas y GPS</span>
         </button>
       </div>
-      <button type="button" class="btn btn-outline btn-sm" id="chooserTema" style="margin-top:1rem">Tema claro / oscuro</button>
+      <button type="button" class="btn btn-outline btn-sm" id="chooserTema" style="margin-top:1.1rem">🌓 Tema</button>
     </div>
   </div>
 
   <div id="consWorkspace" class="cons-layout" hidden>
     <aside class="cons-sidebar no-print">
       <div class="cons-side-head">
-        <button type="button" class="btn btn-outline btn-sm" id="btnVolverChooser" style="width:100%;margin-bottom:.4rem">← Menú principal</button>
-        <h1 id="consSideTitle">📦 Carga</h1>
+        <div class="side-brand">
+          <img src="logo-iem.png" alt="IEM" class="side-logo" onerror="this.onerror=null;this.src='8y7D7.png'" />
+          <div>
+            <div class="side-brand-name">IEM</div>
+            <h1 id="consSideTitle">Carga</h1>
+          </div>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" id="btnVolverChooser" style="width:100%">← Inicio</button>
         <div class="cons-status" id="consStatus" hidden></div>
       </div>
 
       <div class="cons-side-block">
-        <div class="cons-fecha-badge" style="width:100%;justify-content:center;font-size:.78rem">
+        <div class="cons-fecha-badge" style="width:100%;justify-content:center">
           📅 <span id="consFechaLabel">—</span>
         </div>
         <input type="hidden" id="consFecha" />
       </div>
 
       <div class="cons-side-block panel-carga" id="panelSideCarga">
-        <label class="btn btn-primary btn-sm" style="cursor:pointer;width:100%;text-align:center;box-sizing:border-box">
-          Excel de carga
+        <div class="step-label"><span class="step-n">1</span> Subir Excel</div>
+        <label class="btn btn-primary" style="cursor:pointer;width:100%;text-align:center;box-sizing:border-box;padding:.65rem">
+          📂 Elegir archivo
           <input type="file" id="consFile" accept=".xlsx,.xls,.xlsm,.csv" multiple hidden />
         </label>
-        <label class="btn btn-outline btn-sm" style="cursor:pointer;width:100%;text-align:center;box-sizing:border-box;margin-top:.35rem">
+        <label class="btn btn-outline btn-sm" style="cursor:pointer;width:100%;text-align:center;box-sizing:border-box;margin-top:.4rem">
           Carpeta
           <input type="file" id="consFolder" webkitdirectory directory multiple hidden />
         </label>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsRefrescarCarpeta" style="width:100%;margin-top:.35rem">↻ Actualizar</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btnConsRefrescarCarpeta" style="width:100%;margin-top:.35rem" title="Actualizar">↻</button>
         <p class="cons-status" id="consImportStatus" hidden></p>
       </div>
 
       <div class="cons-side-block panel-carga">
-        <label style="font-size:.78rem;color:var(--c-muted)">Camión</label>
-        <select id="consCamion" style="width:100%;margin-top:.25rem">
+        <div class="step-label"><span class="step-n">2</span> Camión</div>
+        <select id="consCamion" style="width:100%;padding:.55rem;font-size:.95rem">
           <option value="">Todos</option>
         </select>
         <select id="consFiltroCamion" hidden>
@@ -514,26 +563,31 @@
       </div>
 
       <div class="cons-side-block panel-carga">
-        <button type="button" class="btn btn-primary btn-sm" id="btnConsPrintUno" style="width:100%">PDF camión</button>
-        <button type="button" class="btn btn-primary btn-sm" id="btnConsPrintMulti" style="width:100%;margin-top:.35rem">PDF todos</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsTema" style="width:100%;margin-top:.35rem">Tema</button>
+        <div class="step-label"><span class="step-n">3</span> Descargar</div>
+        <button type="button" class="btn btn-primary" id="btnConsPrintUno" style="width:100%;padding:.65rem;font-weight:700">PDF camión</button>
+        <button type="button" class="btn btn-outline" id="btnConsPrintMulti" style="width:100%;margin-top:.4rem;padding:.55rem">PDF todos</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btnConsTema" style="width:100%;margin-top:.5rem">🌓</button>
       </div>
 
       <div class="cons-side-block panel-ruta" id="panelSideRuta" hidden>
-        <label class="btn btn-primary btn-sm" style="cursor:pointer;width:100%;text-align:center;box-sizing:border-box">
-          Liquidación / reparto
+        <div class="step-label"><span class="step-n">1</span> Liquidación</div>
+        <label class="btn btn-primary" style="cursor:pointer;width:100%;text-align:center;box-sizing:border-box;padding:.65rem">
+          📂 Subir Excel
           <input type="file" id="rutaFile" accept=".xlsx,.xls,.xlsm,.csv" hidden />
         </label>
-        <p class="cons-status" id="rutaImportStatus" style="font-size:.72rem;margin-top:.4rem">Excel cobranzas (CódigoCliente, Dirección, Camión, Vendedor)</p>
-        <label style="font-size:.78rem;color:var(--c-muted);margin-top:.5rem">Transporte</label>
-        <select id="rutaFiltro" style="width:100%;margin-top:.25rem">
-          <option value="">Todos los transportes</option>
+        <p class="cons-status" id="rutaImportStatus" hidden></p>
+
+        <div class="step-label" style="margin-top:.75rem"><span class="step-n">2</span> Camión</div>
+        <select id="rutaFiltro" style="width:100%;padding:.55rem;font-size:.95rem">
+          <option value="">Todos</option>
         </select>
-        <button type="button" class="btn btn-outline btn-sm" id="btnRutaMiUbicacion" style="width:100%;margin-top:.5rem">📍 Usar mi ubicación</button>
-        <p class="cons-status" id="rutaGeoYo" style="font-size:.7rem;margin-top:.25rem">Origen: aún no capturado</p>
-        <button type="button" class="btn btn-primary btn-sm" id="btnRutaMaps" style="width:100%;margin-top:.45rem">Maps · tramos / elegir parada</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btnRutaPublicar" style="width:100%;margin-top:.35rem">Publicar a vendedores</button>
-        <p class="cons-status" id="rutaStats" style="font-size:.72rem;margin-top:.4rem"></p>
+
+        <div class="step-label" style="margin-top:.75rem"><span class="step-n">3</span> Mapa</div>
+        <button type="button" class="btn btn-outline" id="btnRutaMiUbicacion" style="width:100%;padding:.55rem">📍 Mi ubicación</button>
+        <p class="cons-status" id="rutaGeoYo" hidden></p>
+        <button type="button" class="btn btn-primary" id="btnRutaMaps" style="width:100%;margin-top:.4rem;padding:.65rem;font-weight:700">🗺️ Abrir ruta</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btnRutaPublicar" style="width:100%;margin-top:.4rem">Publicar</button>
+        <p class="cons-status" id="rutaStats" style="font-size:.75rem;margin-top:.5rem;text-align:center"></p>
       </div>
 
       <p class="cons-status" id="consResumen" hidden></p>
@@ -547,7 +601,7 @@
       <div id="panelMainRuta" hidden style="flex:1;display:flex;flex-direction:column;min-height:0;background:var(--c-bg)">
         <div id="rutaMapWrap" class="ruta-map-wrap">
           <div id="rutaMap" class="ruta-map-frame" role="img" aria-label="Mapa de paradas de reparto"></div>
-          <p id="rutaMapHint" class="ruta-map-hint">Sube la liquidación y elige un transporte para ver el mapa</p>
+          <p id="rutaMapHint" class="ruta-map-hint">① Sube Excel  ·  ② Elige camión</p>
           <div id="rutaMapLegend" class="ruta-map-legend" hidden></div>
         </div>
         <div id="rutaList" class="ruta-list" style="padding:0.75rem 1rem 1.5rem;overflow:auto;flex:1"></div>

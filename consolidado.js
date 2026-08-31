@@ -627,7 +627,7 @@
         h.style.paddingBottom = '4px';
       });
       el.querySelectorAll('img').forEach(function (img) {
-        img.style.height = '34px';
+        img.style.height = '42px';
       });
       el.querySelectorAll('.blk-tipo').forEach(function (b) {
         b.style.margin = '4px 0 2px';
@@ -638,7 +638,7 @@
 
     // Escala baja = mucho más rápido (html2canvas es el cuello de botella).
     // 1.15 ≈ legible en pantalla/impresión; 1.5 era ~70% más lento y 2.25× más píxeles.
-    var SCALE = 1.15;
+    var SCALE = 1.1;
     var pdf = new Jspdf({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
     // Secuencial: menos pico de memoria y UI más estable que Promise.all de N páginas
     for (var i = 0; i < els.length; i++) {
@@ -661,7 +661,7 @@
         removeContainer: true
       });
       if (!canvas || !canvas.width) continue;
-      var img = canvas.toDataURL('image/jpeg', 0.72);
+      var img = canvas.toDataURL('image/jpeg', 0.68);
       if (i > 0) pdf.addPage();
       pdf.addImage(img, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
       // Liberar canvas cuanto antes
@@ -2531,7 +2531,7 @@
     var rs = $('rutaStats');
     if (rs && carga) rs.textContent = '';
     var title = $('consSideTitle');
-    if (title) title.textContent = carga ? '📄 Consolidado de carga' : '📍 Geolocalización';
+    if (title) title.textContent = carga ? 'Carga / PDF' : 'Mapa / Ruta';
     try { localStorage.setItem('iem_cons_mode', carga ? 'carga' : 'ruta'); } catch (e) {}
     console.log('[IEM] body classes', document.body.className);
     if (!carga) {
