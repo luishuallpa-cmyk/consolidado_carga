@@ -769,27 +769,31 @@
         } else {
           pdf.autoTable({
             startY: startY,
-            margin: { left: marginX, right: marginX, bottom: 16 },
+            margin: { left: marginX, right: marginX, bottom: 20 },
             head: head,
             body: body,
             theme: 'grid',
             tableWidth: contentW,
+            pageBreak: 'avoid',
+            rowPageBreak: 'avoid',
+            showHead: 'firstPage',
             styles: {
               font: 'helvetica',
               fontSize: 8,
-              cellPadding: 1.35,
+              cellPadding: 1.25,
               lineColor: [148, 163, 184],
               lineWidth: 0.15,
               textColor: [15, 23, 42],
               overflow: 'linebreak',
-              valign: 'middle'
+              valign: 'middle',
+              minCellHeight: 5
             },
             headStyles: {
               fillColor: [226, 232, 240],
               textColor: [15, 23, 42],
               fontStyle: 'bold',
               fontSize: 8,
-              cellPadding: 1.5
+              cellPadding: 1.4
             },
             columnStyles: {
               0: { cellWidth: 12 },
@@ -799,8 +803,7 @@
               4: { cellWidth: 16 },
               5: { cellWidth: 20 },
               6: { cellWidth: 16 }
-            },
-            showHead: 'everyPage'
+            }
           });
         }
 
@@ -1096,8 +1099,8 @@
 
   /** Ítems por hoja (A4 con cabecera IEM + grupos). Más denso = menos páginas vacías. */
   // Capacidad: fila=1, header categoría≈1, banner FRIOS/SECOS≈1
-  var UNIDADES_POR_HOJA = 64;
-  var ITEMS_POR_HOJA = 44; // más filas = menos hueco
+  var UNIDADES_POR_HOJA = 36;
+  var ITEMS_POR_HOJA = 26; // cabe en A4 con cabecera + pie (autoTable)
 
   function pesoVisualFila(it, prevTipo, prevCat) {
     var u = 1;
@@ -1169,7 +1172,7 @@
     if (pages.length >= 2) {
       var last = pages[pages.length - 1];
       var prev = pages[pages.length - 2];
-      if (last.rows.length <= 10 && prev.rows.length + last.rows.length <= ITEMS_POR_HOJA) {
+      if (last.rows.length <= 6 && prev.rows.length + last.rows.length <= ITEMS_POR_HOJA) {
         prev.rows = prev.rows.concat(last.rows);
         prev.esUltima = true;
         pages.pop();
@@ -2705,8 +2708,20 @@
     console.log('[IEM] mostrarChooser()');
     var ch = $('consChooser');
     var ws = $('consWorkspace');
-    if (ch) ch.hidden = false;
-    if (ws) ws.hidden = true;
+    if (ws) {
+      ws.classList.add('ui-fade-out');
+      setTimeout(function () {
+        ws.hidden = true;
+        ws.classList.remove('ui-fade-out');
+        if (ch) {
+          ch.hidden = false;
+          ch.classList.add('ui-fade-in');
+          setTimeout(function () { ch.classList.remove('ui-fade-in'); }, 280);
+        }
+      }, 160);
+    } else if (ch) {
+      ch.hidden = false;
+    }
     document.body.classList.remove('mode-carga', 'mode-ruta');
     try { localStorage.setItem('iem_cons_mode', ''); } catch (e) {}
   }
@@ -2715,10 +2730,22 @@
     console.log('[IEM] abrirModulo(', mode, ')');
     var ch = $('consChooser');
     var ws = $('consWorkspace');
-    console.log('[IEM] DOM chooser=', !!ch, 'workspace=', !!ws);
-    if (ch) ch.hidden = true;
-    if (ws) ws.hidden = false;
-    setMode(mode === 'ruta' ? 'ruta' : 'carga');
+    if (ch) {
+      ch.classList.add('ui-fade-out');
+      setTimeout(function () {
+        ch.hidden = true;
+        ch.classList.remove('ui-fade-out');
+        if (ws) {
+          ws.hidden = false;
+          ws.classList.add('ui-fade-in');
+          setTimeout(function () { ws.classList.remove('ui-fade-in'); }, 280);
+        }
+        setMode(mode === 'ruta' ? 'ruta' : 'carga');
+      }, 160);
+    } else {
+      if (ws) ws.hidden = false;
+      setMode(mode === 'ruta' ? 'ruta' : 'carga');
+    }
   }
 
   function setMode(mode) {

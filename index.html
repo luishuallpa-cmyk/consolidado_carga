@@ -619,6 +619,43 @@
     body.mode-carga .cons-main {
       background: #404040;
     }
+  
+    /* Transiciones suaves menú ↔ módulo */
+    #consChooser, #consWorkspace {
+      transition: opacity .22s ease, transform .22s ease;
+    }
+    .ui-fade-out {
+      opacity: 0 !important;
+      transform: scale(0.98);
+      pointer-events: none;
+    }
+    .ui-fade-in {
+      animation: iemFadeIn .28s ease forwards;
+    }
+    @keyframes iemFadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .cons-sidebar {
+      transition: background .2s ease, border-color .2s ease;
+    }
+    .cons-sidebar .btn,
+    .cons-sidebar .btn-theme {
+      transition: background .18s ease, border-color .18s ease, transform .15s ease, box-shadow .18s ease;
+    }
+    .cons-sidebar .btn:active {
+      transform: scale(0.98);
+    }
+    .chooser-opt {
+      transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease !important;
+    }
+    .chooser-opt:hover, .chooser-opt:focus-visible {
+      transform: translateY(-2px) scale(1.01) !important;
+    }
+    .chooser-opt:active {
+      transform: translateY(0) scale(0.99) !important;
+    }
+
   </style>
 </head>
 <body class="cons-page">
