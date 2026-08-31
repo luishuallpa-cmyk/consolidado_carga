@@ -7,6 +7,14 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="IEM Consolidado" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192" />
   <link rel="icon" href="logo-iem.png" sizes="32x32" />
   <style>
     :root { --c-bg:#0f172a; --c-card:#1e293b; --c-border:#334155; --c-text:#f1f5f9; --c-muted:#94a3b8; --c-pri:#3B6EA5; --c-ok:#16a34a; --c-bad:#dc2626; }
@@ -855,5 +863,17 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="consolidado.js"></script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('./sw.js').then(function (reg) {
+          console.log('[IEM] SW registrado', reg.scope);
+        }).catch(function (err) {
+          console.warn('[IEM] SW no registrado', err);
+        });
+      });
+    }
+  </script>
 </body>
 </html>
