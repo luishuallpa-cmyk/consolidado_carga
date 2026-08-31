@@ -1,758 +1,980 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>IEM · Consolidado de carga</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-
-  <link rel="icon" href="logo-iem.png" sizes="32x32" />
-  <style>
-    :root { --c-bg:#0f172a; --c-card:#1e293b; --c-border:#334155; --c-text:#f1f5f9; --c-muted:#94a3b8; --c-pri:#3B6EA5; --c-ok:#16a34a; --c-bad:#dc2626; }
-    body.cons-page { margin:0; background:var(--c-bg); color:var(--c-text); font-family:system-ui,-apple-system,sans-serif; min-height:100vh; }
-    body.cons-page.light-theme { --c-bg:#f8fafc; --c-card:#fff; --c-border:#e2e8f0; --c-text:#0f172a; --c-muted:#64748b; }
-    .cons-wrap { max-width:1100px; margin:0 auto; padding:1rem 1rem 4rem; }
-    .cons-head { display:flex; flex-wrap:wrap; gap:.75rem; align-items:center; justify-content:space-between; margin-bottom:1rem; }
-    .cons-head h1 { margin:0; font-size:1.25rem; }
-    .cons-card { background:var(--c-card); border:1px solid var(--c-border); border-radius:14px; padding:1rem; margin-bottom:1rem; }
-    .cons-actions { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
-    .cons-status { font-size:.85rem; color:var(--c-muted); margin:.35rem 0; }
-    .btn { cursor:pointer; border-radius:10px; border:1px solid var(--c-border); background:transparent; color:var(--c-text); padding:.5rem .85rem; font:inherit; font-size:.88rem; }
-    .btn-primary { background:var(--c-pri); border-color:var(--c-pri); color:#fff; font-weight:600; }
-    .btn-outline { background:transparent; }
-    .btn-sm { padding:.4rem .7rem; font-size:.82rem; }
-    .btn-danger { border-color:var(--c-bad); color:#fecaca; }
-    select { padding:.45rem .65rem; border-radius:10px; border:1px solid var(--c-border); background:var(--c-bg); color:var(--c-text); font:inherit; }
-    .cons-fecha-badge { display:inline-flex; align-items:center; gap:.4rem; padding:.35rem .75rem; border-radius:999px; background:rgba(59,110,165,.2); border:1px solid var(--c-pri); font-size:.85rem; font-weight:600; }
-    .cons-toolbar-main { display:flex; flex-wrap:wrap; gap:.5rem; margin:.5rem 0; }
-    .cons-table-wrap { overflow:auto; max-height:42vh; border:1px solid var(--c-border); border-radius:12px; }
-    .cons-preview-wrap {
-      overflow: auto;
-      max-height: min(70vh, 900px);
-      border: 1px solid var(--c-border);
-      border-radius: 12px;
-      background: #525659;
-      padding: 12px 8px 20px;
-    }
-    body.light-theme .cons-preview-wrap { background: #94a3b8; }
-    .cons-preview-inner {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
-      transform-origin: top center;
-    }
-    .cons-preview-inner .print-page {
-      width: 210mm;
-      max-width: 100%;
-      box-sizing: border-box;
-      background: #fff;
-      color: #0f172a;
-      padding: 10mm 12mm;
-      box-shadow: 0 4px 20px rgba(0,0,0,.35);
-      border-radius: 2px;
-    }
-    .cons-preview-empty {
-      color: #e2e8f0;
-      text-align: center;
-      padding: 2.5rem 1rem;
-      font-size: 0.9rem;
-    }
-    body.light-theme .cons-preview-empty { color: #0f172a; }
-
-    .cons-table { width:100%; border-collapse:collapse; font-size:.82rem; }
-    .cons-table th, .cons-table td { padding:.4rem .5rem; border-bottom:1px solid var(--c-border); text-align:left; white-space:nowrap; }
-    .cons-table th { position:sticky; top:0; background:var(--c-card); z-index:1; }
-    .badge-frio { color:#38bdf8; font-weight:700; }
-    .badge-seco { color:#fbbf24; font-weight:700; }
-    .cons-hint { font-size:.8rem; color:var(--c-muted); margin:0 0 .5rem; }
-  
-    @media print {
-      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-      .no-print { display: none !important; }
-      body.cons-page { background: #fff !important; margin: 0 !important; }
-      .cons-head, .cons-card.no-print-section, .cons-hint, .cons-actions, .cons-toolbar-main,
-      .cons-status, #consFile, #consFolder, .btn, select, .cons-fecha-badge, .cons-preview-empty { display: none !important; }
-      .cons-wrap { max-width: none !important; padding: 0 !important; margin: 0 !important; }
-      .cons-card { border: none !important; background: transparent !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; }
-      h3 { display: none !important; }
-      .cons-preview-wrap {
-        max-height: none !important;
-        overflow: visible !important;
-        background: #fff !important;
-        border: none !important;
-        padding: 0 !important;
-        margin: 0 !important;
-      }
-      .cons-preview-inner {
-        display: block !important;
-        gap: 0 !important;
-        transform: none !important;
-      }
-      /* Cada bloque = 1 página física, igual que la vista previa */
-      .print-page {
-        box-shadow: none !important;
-        width: 100% !important;
-        max-width: none !important;
-        min-height: 0 !important;
-        max-height: none !important;
-        height: auto !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        border-radius: 0 !important;
-        overflow: visible !important;
-        page-break-after: always !important;
-        break-after: page !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
-      }
-      .print-page:last-child {
-        page-break-after: auto !important;
-        break-after: auto !important;
-      }
-      .print-header, .blk-tipo { page-break-after: avoid !important; break-after: avoid !important; }
-      table { page-break-inside: avoid !important; }
-      tr { page-break-inside: avoid !important; }
-      thead { display: table-header-group !important; }
-      @page { size: A4 portrait; margin: 8mm; }
-    }
-
-  
-    .cons-pdf-frame { display:block; }
-    @media print {
-      .cons-pdf-frame { display: none !important; }
-    }
-  
-    #consPreviewInner {
-      position: fixed;
-      left: 0;
-      top: 0;
-      width: 794px;
-      background: #fff;
-      color: #0f172a;
-      z-index: -1;
-      opacity: 0.01;
-      pointer-events: none;
-      overflow: visible;
-    }
-    #consPreviewInner .print-page {
-      width: 190mm;
-      background: #fff;
-      padding: 6mm;
-      box-sizing: border-box;
-      margin-bottom: 8px;
-    }
-  
-    .cons-layout {
-      display: flex;
-      min-height: 100vh;
-      height: 100vh;
-      overflow: hidden;
-    }
-    .cons-sidebar {
-      width: 168px;
-      flex-shrink: 0;
-      background: var(--c-card);
-      border-right: 1px solid var(--c-border);
-      padding: .75rem;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: .65rem;
-    }
-    .cons-side-head h1 { margin: 0; font-size: 1.05rem; }
-    .cons-side-block { display: flex; flex-direction: column; }
-    .cons-main {
-      flex: 1;
-      min-width: 0;
-      background: #3f3f46;
-      display: flex;
-      flex-direction: column;
-    }
-    .cons-pdf-frame {
-      flex: 1;
-      width: 100%;
-      height: 100%;
-      border: 0;
-      background: #525659;
-    }
-    #consPreviewInner {
-      position: fixed;
-      left: 0;
-      top: 0;
-      width: 794px;
-      background: #fff;
-      color: #0f172a;
-      z-index: -1;
-      opacity: 0.01;
-      pointer-events: none;
-      overflow: visible;
-    }
-    #consPreviewInner .print-page {
-      width: 190mm;
-      background: #fff;
-      padding: 5mm;
-      box-sizing: border-box;
-      margin-bottom: 6px;
-    }
-    @media (max-width: 720px) {
-      .cons-layout { flex-direction: column; height: auto; min-height: 100vh; overflow: auto; }
-      .cons-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--c-border); }
-      .cons-main { min-height: 70vh; }
-      .cons-pdf-frame { min-height: 70vh; }
-    }
-  
-    .cons-mode-tabs { display:flex; gap:.35rem; }
-    .mode-tab {
-      flex:1; cursor:pointer; border-radius:8px; border:1px solid var(--c-border);
-      background:transparent; color:var(--c-muted); padding:.4rem .35rem; font-size:.75rem; font-weight:600;
-    }
-    .mode-tab.active { background:var(--c-pri); border-color:var(--c-pri); color:#fff; }
-    .ruta-list { display:flex; flex-direction:column; gap:.6rem; max-width:900px; margin:0 auto; }
-    .ruta-card {
-      background:var(--c-card); border:1px solid var(--c-border); border-radius:12px; padding:.75rem .9rem;
-    }
-    .ruta-card h4 { margin:0 0 .35rem; font-size:.95rem; }
-    .ruta-card .meta { font-size:.78rem; color:var(--c-muted); }
-    .ruta-card .geo-ok { color:#4ade80; }
-    .ruta-card .geo-miss { color:#fbbf24; }
-    .ruta-card a.maps-link {
-      display:inline-block; margin-top:.4rem; font-size:.82rem; color:#38bdf8; text-decoration:none; font-weight:600;
-    }
-    .ruta-transport-head {
-      display:flex; align-items:center; justify-content:space-between; gap:.75rem; flex-wrap:wrap;
-      background:var(--c-card); border:1px solid var(--c-border); border-radius:12px;
-      padding:.65rem .85rem; margin:1rem 0 .5rem;
-    }
-    .ruta-transport-head .meta { font-size:.75rem; color:var(--c-muted); margin-top:.15rem; }
-    .ruta-group-title {
-      font-size:.8rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
-      color:var(--c-muted); margin:1rem 0 .4rem;
-    }
-    .ruta-map-wrap {
-      position: relative;
-      flex: 0 0 42vh;
-      min-height: 220px;
-      max-height: 440px;
-      background: #2a2f3a;
-      border-bottom: 1px solid var(--c-border);
-    }
-    .ruta-map-frame {
-      display: block;
-      width: 100%;
-      height: 100%;
-      border: 0;
-      z-index: 1;
-      background: #1e293b;
-    }
-    .ruta-map-legend {
-      position: absolute;
-      bottom: 12px;
-      left: 12px;
-      z-index: 500;
-      background: rgba(15, 23, 42, 0.92);
-      color: #f1f5f9;
-      border: 1px solid #334155;
-      border-radius: 10px;
-      padding: 8px 12px;
-      font-size: 0.72rem;
-      line-height: 1.45;
-      max-width: min(260px, 70%);
-      box-shadow: 0 4px 14px rgba(0,0,0,.35);
-      pointer-events: none;
-    }
-    body.light-theme .ruta-map-legend {
-      background: rgba(255,255,255,0.95);
-      color: #0f172a;
-      border-color: #e2e8f0;
-    }
-    .ruta-map-legend b { display: block; margin-bottom: 4px; font-size: 0.78rem; }
-    .ruta-map-legend .leg-row {
-      display: flex; align-items: center; gap: 6px; margin: 2px 0;
-    }
-    .ruta-map-legend .leg-dot {
-      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
-      border: 1px solid rgba(255,255,255,.5);
-    }
-    .leaflet-popup-content { font-size: 0.82rem; line-height: 1.35; margin: 8px 10px; }
-    .leaflet-popup-content b { font-size: 0.9rem; }
-    .leaflet-container a.leaflet-popup-close-button { color: #64748b; }
-    .ruta-map-hint {
-      position: absolute;
-      inset: 0;
-      margin: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 1.5rem;
-      color: var(--c-muted);
-      font-size: .85rem;
-      background: var(--c-card);
-    }
-    .ruta-map-wrap.has-map .ruta-map-hint { display: none; }
-
-    .chooser-logo {
-      height: 72px; width: auto; max-width: 160px; object-fit: contain;
-      display: block; margin: 0 auto 0.35rem;
-      filter: drop-shadow(0 2px 8px rgba(0,0,0,.25));
-    }
-    .chooser-brand { text-align: center; }
-    .chooser-brand h1 { margin: 0.15rem 0 0.85rem; font-size: 1.4rem; letter-spacing: 0.02em; }
-    
-    .chooser-opt {
-      position: relative;
-      z-index: 2;
-      min-height: 168px;
-      padding: 1.1rem 0.9rem 1rem;
-      gap: 0.45rem;
-      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;
-      position: relative;
-      overflow: hidden;
-    }
-    .chooser-opt .chooser-visual {
-      display: flex; align-items: center; justify-content: center;
-      margin-bottom: 0.15rem;
-      transition: transform .22s ease;
-    }
-    .chooser-opt .chooser-visual svg {
-      filter: drop-shadow(0 4px 10px rgba(0,0,0,.28));
-    }
-    .chooser-opt:hover, .chooser-opt:focus-visible {
-      transform: translateY(-4px) scale(1.02);
-      border-color: var(--c-pri);
-      box-shadow: 0 12px 28px rgba(0,0,0,.35);
-      outline: none;
-    }
-    .chooser-opt:hover .chooser-visual,
-    .chooser-opt:focus-visible .chooser-visual {
-      transform: scale(1.08);
-    }
-    .chooser-opt:active {
-      transform: translateY(-1px) scale(0.99);
-    }
-    .chooser-opt-carga:hover, .chooser-opt-carga:focus-visible {
-      border-color: #3B6EA5;
-      background: linear-gradient(160deg, rgba(59,110,165,.22), transparent 70%);
-    }
-    .chooser-opt-ruta:hover, .chooser-opt-ruta:focus-visible {
-      border-color: #ef4444;
-      background: linear-gradient(160deg, rgba(239,68,68,.18), transparent 70%);
-    }
-    .chooser-title {
-      font-size: 1.05rem;
-      font-weight: 800;
-      letter-spacing: 0.01em;
-    }
-    .chooser-desc {
-      font-size: 0.82rem;
-      opacity: 0.9;
-    }
-
-    .side-brand {
-      display: flex; align-items: center; gap: 0.65rem; margin-bottom: 0.55rem;
-    }
-    .side-logo {
-      height: 40px; width: auto; max-width: 56px; object-fit: contain; flex-shrink: 0;
-    }
-    .side-brand-name {
-      font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em;
-      color: var(--c-muted); text-transform: uppercase;
-    }
-    .cons-side-head h1 {
-      margin: 0; font-size: 1.05rem; font-weight: 700;
-    }
-    .step-label {
-      display: flex; align-items: center; gap: 0.45rem;
-      font-size: 0.78rem; font-weight: 700; color: var(--c-muted);
-      margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.03em;
-    }
-    .step-n {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 1.35rem; height: 1.35rem; border-radius: 999px;
-      background: var(--c-pri); color: #fff; font-size: 0.75rem; font-weight: 800;
-    }
-    .cons-sidebar .btn {
-      font-size: 0.9rem;
-    }
-    .cons-sidebar select {
-      border-radius: 10px; border: 1px solid var(--c-border);
-      background: var(--c-bg); color: var(--c-text); font: inherit;
-    }
-
-
-    /* Panel Google Maps: tramos + elegir parada */
-    #rutaMapsOverlay {
-      display: none; position: fixed; inset: 0; z-index: 9999;
-      background: rgba(15,23,42,.65); align-items: flex-end; justify-content: center;
-      padding: 0;
-    }
-    #rutaMapsOverlay.open { display: flex; }
-    .ruta-maps-modal {
-      width: min(520px, 100%);
-      max-height: min(88vh, 720px);
-      background: var(--c-card, #1e293b);
-      color: var(--c-text, #f1f5f9);
-      border-radius: 16px 16px 0 0;
-      border: 1px solid var(--c-border, #334155);
-      display: flex; flex-direction: column;
-      box-shadow: 0 -8px 40px rgba(0,0,0,.4);
-    }
-    @media (min-width: 720px) {
-      #rutaMapsOverlay { align-items: center; padding: 1rem; }
-      .ruta-maps-modal { border-radius: 16px; max-height: 80vh; }
-    }
-    .ruta-maps-head {
-      display: flex; align-items: center; justify-content: space-between;
-      gap: .75rem; padding: .85rem 1rem; border-bottom: 1px solid var(--c-border, #334155);
-    }
-    .ruta-maps-hint {
-      margin: 0; padding: .65rem 1rem; font-size: .78rem; color: var(--c-muted, #94a3b8);
-      line-height: 1.35;
-    }
-    .ruta-maps-actions {
-      display: flex; flex-wrap: wrap; gap: .4rem; padding: 0 1rem .65rem;
-    }
-    .ruta-maps-actions .btn { font-size: .78rem; }
-    .ruta-maps-list {
-      overflow: auto; flex: 1; padding: 0 .5rem .75rem;
-      -webkit-overflow-scrolling: touch;
-    }
-    .ruta-maps-item {
-      display: flex; align-items: center; gap: .55rem;
-      padding: .55rem .65rem; margin: .25rem 0;
-      border-radius: 10px; text-decoration: none;
-      color: inherit; border: 1px solid var(--c-border, #334155);
-      background: var(--c-bg, #0f172a);
-    }
-    .ruta-maps-item:active, .ruta-maps-item:hover {
-      border-color: var(--c-pri, #3B6EA5);
-      background: rgba(59,110,165,.15);
-    }
-    .ruta-maps-item .n {
-      flex-shrink: 0; width: 1.5rem; height: 1.5rem; border-radius: 999px;
-      background: var(--c-pri, #3B6EA5); color: #fff;
-      display: flex; align-items: center; justify-content: center;
-      font-size: .72rem; font-weight: 700;
-    }
-    .ruta-maps-item .txt { flex: 1; min-width: 0; }
-    .ruta-maps-item .txt b { display: block; font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .ruta-maps-item .txt small { display: block; font-size: .72rem; color: var(--c-muted, #94a3b8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .ruta-maps-item .go { flex-shrink: 0; font-size: .78rem; font-weight: 700; color: #38bdf8; }
-
-    @media (max-width: 720px) {
-      .ruta-map-wrap { flex-basis: 34vh; min-height: 180px; }
-    }
-  
-    .cons-chooser {
-      min-height: 100vh; min-height: 100dvh;
-      display: flex; align-items: center; justify-content: center;
-      padding: 1.25rem;
-      position: relative;
-      overflow: hidden;
-      background:
-        radial-gradient(ellipse 80% 60% at 50% -10%, rgba(59,110,165,.28), transparent 55%),
-        radial-gradient(ellipse 50% 40% at 100% 100%, rgba(239,68,68,.12), transparent 50%),
-        radial-gradient(ellipse 40% 30% at 0% 80%, rgba(34,197,94,.1), transparent 45%),
-        var(--c-bg);
-    }
-    .cons-chooser::before {
-      content: "";
-      position: absolute; inset: 0;
-      background-image:
-        linear-gradient(rgba(148,163,184,.07) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(148,163,184,.07) 1px, transparent 1px);
-      background-size: 48px 48px;
-      mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 20%, transparent 75%);
-      pointer-events: none;
-    }
-    .cons-chooser::after {
-      content: "";
-      position: absolute; inset: 0;
-      background: repeating-linear-gradient(
-        -18deg,
-        transparent,
-        transparent 40px,
-        rgba(59,110,165,.04) 40px,
-        rgba(59,110,165,.04) 41px
-      );
-      pointer-events: none;
-    }
-    .cons-chooser .chooser-card {
-      position: relative;
-      z-index: 1;
-      backdrop-filter: blur(8px);
-    }
-    body.light-theme .cons-chooser {
-      background:
-        radial-gradient(ellipse 80% 60% at 50% -10%, rgba(59,110,165,.18), transparent 55%),
-        radial-gradient(ellipse 50% 40% at 100% 100%, rgba(239,68,68,.08), transparent 50%),
-        #f1f5f9;
-    }
-    body.light-theme .cons-chooser::before {
-      background-image:
-        linear-gradient(rgba(100,116,139,.1) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(100,116,139,.1) 1px, transparent 1px);
-    }
-    .chooser-card {
-      width: min(640px, 100%);
-      background: var(--c-card);
-      border: 1px solid var(--c-border);
-      border-radius: 18px;
-      padding: 1.5rem 1.35rem 1.35rem;
-      box-shadow: 0 12px 40px rgba(0,0,0,.25);
-      text-align: center;
-    }
-    .chooser-brand h1 { margin: 0.5rem 0 0.25rem; font-size: 1.35rem; }
-    .chooser-brand p { margin: 0 0 1.25rem; color: var(--c-muted); font-size: 0.92rem; }
-    .chooser-logo { height: 72px; width: auto; object-fit: contain; }
-    .chooser-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 0.75rem;
-    }
-    @media (min-width: 560px) {
-      .chooser-grid { grid-template-columns: 1fr 1fr; }
-    }
-    .chooser-opt {
-      cursor: pointer; text-align: left;
-      border: 1px solid var(--c-border);
-      background: color-mix(in srgb, var(--c-bg) 70%, var(--c-card));
-      color: var(--c-text);
-      border-radius: 14px;
-      padding: 1rem 1rem 1.05rem;
-      display: flex; flex-direction: column; gap: 0.35rem;
-      transition: border-color .15s, transform .12s, box-shadow .15s;
-      font: inherit;
-    }
-    .chooser-opt:hover, .chooser-opt:focus {
-      border-color: var(--c-pri);
-      box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-pri) 35%, transparent);
-      transform: translateY(-1px);
-      outline: none;
-    }
-    .chooser-ico { font-size: 1.6rem; line-height: 1; }
-    .chooser-title { font-weight: 700; font-size: 1rem; }
-    .chooser-desc { font-size: 0.8rem; color: var(--c-muted); line-height: 1.35; }
-    #consWorkspace[hidden] { display: none !important; }
-    #consChooser[hidden] { display: none !important; }
-
-    /* —— Modos: solo un módulo visible —— */
-    body.mode-carga .panel-ruta,
-    body.mode-carga #panelMainRuta { display: none !important; }
-    body.mode-ruta .panel-carga,
-    body.mode-ruta #panelMainCarga { display: none !important; }
-    body.mode-carga #panelMainCarga { display: flex !important; }
-    body.mode-ruta #panelMainRuta { display: flex !important; }
-
-    .cons-sidebar {
-      width: 200px;
-      background: linear-gradient(180deg, color-mix(in srgb, var(--c-card) 95%, #000) 0%, var(--c-card) 100%);
-    }
-    .cons-side-head h1 {
-      margin: 0.15rem 0 0.35rem;
-      font-size: 0.98rem;
-      line-height: 1.25;
-    }
-    .cons-side-block {
-      padding: 0.55rem 0;
-      border-top: 1px solid color-mix(in srgb, var(--c-border) 80%, transparent);
-    }
-    .cons-side-block:first-of-type { border-top: none; }
-    .cons-side-block .btn { border-radius: 10px; }
-    .cons-side-block label.btn { margin: 0; }
-    .cons-fecha-badge {
-      background: color-mix(in srgb, var(--c-pri) 22%, transparent);
-      border: 1px solid color-mix(in srgb, var(--c-pri) 55%, var(--c-border));
-    }
-    #btnVolverChooser {
-      font-size: 0.78rem;
-      opacity: 0.95;
-    }
-    .cons-main {
-      background: #3f3f46;
-    }
-    body.mode-carga .cons-main {
-      background: #404040;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.5, user-scalable=yes, viewport-fit=cover">
+    <title>IEM GROUP · Inventario</title>
+    <meta name="description" content="Conteo de inventario físico y catálogo IEM GROUP">
+    <meta name="theme-color" content="#0f172a" id="metaThemeColor">
+    <meta name="theme-color" content="#3B6EA5" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="IEM Inventario">
+    <meta name="application-name" content="IEM Inventario">
+    <!-- Seguridad básica del cliente -->
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="csrf-token" content="">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.co/functions/v1 https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com; worker-src 'self' blob:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/png" href="logo-iem.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+    <link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <!-- XLSX / JSZip / html5-qrcode: carga diferida al usar Excel o escáner (ver ensureLib en app.js) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+    // Vigilante independiente de arranque: no depende de app.js ni de config.js.
+    // Si a los 15s la app no confirmó que arrancó (p. ej. porque el CDN de
+    // Supabase no cargó por una red inestable, un bloqueador o el CDN caído),
+    // muestra un aviso con botón de reintentar en vez de dejar el spinner
+    // girando para siempre.
+    (function () {
+        window.__iemShowBootError = function (msg) {
+            if (document.getElementById('iemBootError')) return;
+            var ov = document.createElement('div');
+            ov.id = 'iemBootError';
+            ov.setAttribute('role', 'alert');
+            ov.style.cssText = 'position:fixed;inset:0;z-index:999999;display:flex;' +
+                'align-items:center;justify-content:center;background:rgba(15,23,42,0.94);' +
+                'color:#fff;font-family:Inter,Arial,sans-serif;padding:24px;text-align:center;';
+            ov.innerHTML =
+                '<div style="max-width:340px;">' +
+                '<p style="font-size:16px;line-height:1.5;margin:0 0 16px;">' + msg + '</p>' +
+                '<button id="iemBootRetryBtn" type="button" style="background:#3B6EA5;color:#fff;' +
+                'border:none;border-radius:8px;padding:12px 24px;font-size:15px;cursor:pointer;">' +
+                'Reintentar</button></div>';
+            document.body.appendChild(ov);
+            var btn = document.getElementById('iemBootRetryBtn');
+            if (btn) btn.addEventListener('click', function () { try { sessionStorage.setItem('iem_allow_unload','1'); } catch(e){} location.reload(); });
+        };
+        setTimeout(function () {
+            if (!window.__iemAppBooted) {
+                window.__iemShowBootError(
+                    'No se pudo cargar la aplicación (falló una librería externa). ' +
+                    'Revisa tu conexión a internet e inténtalo de nuevo.'
+                );
+            }
+        }, 15000);
+    })();
+    </script>
+    <link rel="stylesheet" href="style.css?v=1.4.4">
+    <link rel="stylesheet" href="admin.css?v=1.4.4">
+<script>
+(function(){try{var t=localStorage.getItem('buscador_tema')||'dark';
+if(t==='light'){document.documentElement.classList.add('light-theme');document.documentElement.setAttribute('data-theme','light');}
+else{document.documentElement.setAttribute('data-theme','dark');}
+}catch(e){}})();
+</script>
 </head>
-<body class="cons-page">
-  <!-- Ventana previa: elegir módulo -->
-  <div id="consChooser" class="cons-chooser">
-    <div class="chooser-card">
-      <div class="chooser-brand">
-        <img src="logo-iem.png" alt="IEM Group" class="chooser-logo" width="120" height="72"
-          onerror="this.onerror=null;this.src='8y7D7.png'" />
-        <h1>IEM Logística</h1>
-      </div>
-      <div class="chooser-grid">
-        <button type="button" class="chooser-opt chooser-opt-carga" id="chooserCarga" data-go="carga">
-          <span class="chooser-visual" aria-hidden="true">
-            <svg viewBox="0 0 80 80" width="72" height="72">
-              <defs>
-                <linearGradient id="gCarga" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stop-color="#3B6EA5"/>
-                  <stop offset="100%" stop-color="#1e3a5f"/>
-                </linearGradient>
-              </defs>
-              <!-- cabina -->
-              <path d="M12 42h18v16H12z" fill="url(#gCarga)"/>
-              <path d="M18 30h12l8 12H18z" fill="#60a5fa"/>
-              <rect x="20" y="34" width="8" height="6" rx="1" fill="#e0f2fe"/>
-              <!-- caja / carga -->
-              <rect x="30" y="36" width="36" height="22" rx="3" fill="url(#gCarga)"/>
-              <rect x="34" y="40" width="12" height="8" rx="1" fill="#93c5fd" opacity=".7"/>
-              <rect x="50" y="40" width="12" height="8" rx="1" fill="#93c5fd" opacity=".7"/>
-              <!-- ruedas -->
-              <circle cx="22" cy="60" r="7" fill="#0f172a"/>
-              <circle cx="22" cy="60" r="3.5" fill="#94a3b8"/>
-              <circle cx="58" cy="60" r="7" fill="#0f172a"/>
-              <circle cx="58" cy="60" r="3.5" fill="#94a3b8"/>
-              <!-- badge -->
-              <circle cx="66" cy="28" r="11" fill="#16a34a"/>
-              <path d="M61 28h10M66 23v10" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
-            </svg>
-          </span>
-          <span class="chooser-title">Consolidado de carga</span>
-          <span class="chooser-desc">Excel → PDF por camión</span>
-        </button>
-        <button type="button" class="chooser-opt chooser-opt-ruta" id="chooserRuta" data-go="ruta">
-          <span class="chooser-visual" aria-hidden="true">
-            <svg viewBox="0 0 80 80" width="72" height="72">
-              <defs>
-                <linearGradient id="gRuta" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stop-color="#ef4444"/>
-                  <stop offset="100%" stop-color="#b91c1c"/>
-                </linearGradient>
-              </defs>
-              <path d="M18 58 C28 40, 36 48, 40 32 C44 18, 52 22, 62 20" fill="none" stroke="#38bdf8" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 6"/>
-              <path d="M40 12c-8 0-14 6.2-14 14 0 10.5 14 26 14 26s14-15.5 14-26c0-7.8-6-14-14-14z" fill="url(#gRuta)"/>
-              <circle cx="40" cy="26" r="5.5" fill="#fff"/>
-              <circle cx="18" cy="58" r="5" fill="#22c55e" stroke="#fff" stroke-width="2"/>
-              <circle cx="62" cy="20" r="5" fill="#f59e0b" stroke="#fff" stroke-width="2"/>
-            </svg>
-          </span>
-          <span class="chooser-title">Rutas</span>
-          <span class="chooser-desc">Paradas · mapa · GPS</span>
-        </button>
-      </div>
-      <button type="button" class="btn btn-outline btn-sm" id="chooserTema" style="margin-top:1.1rem">🌓 Tema</button>
+<body>
+<script>
+(function(){try{if(document.documentElement.classList.contains('light-theme'))document.body.classList.add('light-theme');
+var t=localStorage.getItem('buscador_tema')||'dark';
+if(t==='light')document.body.classList.add('light-theme');
+else document.body.classList.remove('light-theme');
+}catch(e){}})();
+</script>
+
+<div id="globalLoading" class="global-loading gl-mode-boot" aria-live="polite" aria-busy="true" aria-label="Cargando">
+  <div class="gl-boot" aria-hidden="true">
+    <div class="gl-boot-ring"></div>
+    <img class="gl-boot-logo" src="logo-iem.png" alt="">
+  </div>
+  <div class="gl-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+</div>
+    <a class="skip-link" href="#mainContent">Saltar al contenido</a>
+<div class="login-overlay" id="loginOverlay">
+    <button type="button" class="login-theme-toggle" id="loginThemeToggleBtn" title="Cambiar tema claro/oscuro" aria-label="Cambiar entre tema claro y oscuro">☀️</button>
+    <div class="login-card">
+        <div class="login-logo">
+            <img src="logo-iem.png" alt="IEM GROUP · LAIVE">
+        </div>
+        <h2>Iniciar sesión</h2>
+        <p class="login-subtitle">Inventario físico · IEM GROUP</p>
+        <p class="login-version" id="loginVersion">v1.3.5</p>
+        <form id="loginForm" action="#" method="post" autocomplete="on">
+            <input type="hidden" name="_csrf" id="csrfToken" value="">
+            <div class="login-field">
+                <label for="loginUsuario">Usuario</label>
+                <input type="text" id="loginUsuario" name="username" required minlength="2" maxlength="64" pattern="[A-Za-z0-9._\-]+" title="Usuario: letras, números, punto, guion o guion bajo (mín. 2)" autocomplete="username" placeholder="Tu usuario" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text">
+            </div>
+            <div class="login-field">
+                <label for="loginClave">Clave</label>
+                <input type="password" id="loginClave" name="password" required minlength="4" maxlength="128" title="Clave: mínimo 4 caracteres" autocomplete="current-password" placeholder="Tu clave">
+            </div>
+            <div class="login-error hidden" id="loginError"></div>
+            <button type="submit" class="btn btn-primary login-btn" id="loginBtn">Entrar</button>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================================
+     HUB / MENÚ PRINCIPAL (post-login, admin)
+     ============================================================ -->
+<div class="hub-overlay hidden" id="hubOverlay" aria-hidden="true">
+  <div class="hub-top-actions" role="toolbar" aria-label="Acciones del menú">
+    <button type="button" class="hub-theme-toggle" id="hubThemeToggleBtn" title="Cambiar tema claro/oscuro" aria-label="Cambiar tema">☀️</button>
+    <button type="button" class="hub-logout-btn" id="hubLogoutBtn" title="Cerrar sesión" aria-label="Cerrar sesión">Salir</button>
+  </div>
+  <div class="hub-card">
+    <h1 class="hub-title">IEM · Menú</h1>
+    <p class="hub-user" id="hubUserLabel"></p>
+    <div class="hub-grid" id="hubGrid" role="list">
+      <!-- Inventario siempre primero -->
+      <button type="button" class="hub-item hub-item-primary" data-hub-action="inventario" role="listitem">
+        <span class="hub-ico" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="40" height="40"><rect x="8" y="12" width="32" height="28" rx="4" fill="#3B6EA5"/><rect x="14" y="8" width="20" height="6" rx="2" fill="#60a5fa"/><path d="M16 22h16M16 28h12M16 34h8" stroke="#e2e8f0" stroke-width="2.5" stroke-linecap="round"/></svg>
+        </span>
+        <span class="hub-item-title">Inventario</span>
+</button>
+      <button type="button" class="hub-item hub-item-primary" data-hub-action="productos" role="listitem">
+        <span class="hub-ico" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="40" height="40"><rect x="8" y="10" width="14" height="28" rx="2" fill="#8b5cf6"/><rect x="26" y="10" width="14" height="28" rx="2" fill="#a78bfa"/><circle cx="15" cy="20" r="3" fill="#ede9fe"/><path d="M11 28h8M11 33h6M29 18h8M29 24h8M29 30h6" stroke="#f5f3ff" stroke-width="2" stroke-linecap="round"/></svg>
+        </span>
+        <span class="hub-item-title">Productos</span>
+      </button>
+      <button type="button" class="hub-item hub-item-admin" data-hub-action="admin" data-admin-tab="subir" role="listitem">
+        <span class="hub-ico" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="40" height="40"><rect x="10" y="8" width="28" height="32" rx="3" fill="#1e293b" stroke="#64748b" stroke-width="2"/><path d="M18 20h12M18 26h12M18 32h8" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/><circle cx="34" cy="34" r="10" fill="#22c55e"/><path d="M34 29v10M29 34h10" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>
+        </span>
+        <span class="hub-item-title">Subir Excel</span>
+</button>
+      <button type="button" class="hub-item hub-item-admin" data-hub-action="admin" data-admin-tab="catalogo" role="listitem">
+        <span class="hub-ico" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="40" height="40"><rect x="8" y="10" width="14" height="28" rx="2" fill="#6366f1"/><rect x="26" y="10" width="14" height="28" rx="2" fill="#818cf8"/><path d="M12 16h6M12 22h6M30 16h6M30 22h6" stroke="#e0e7ff" stroke-width="2" stroke-linecap="round"/></svg>
+        </span>
+        <span class="hub-item-title">Catálogo</span>
+</button>
+      <button type="button" class="hub-item hub-item-admin" data-hub-action="admin" data-admin-tab="barras" role="listitem">
+        <span class="hub-ico" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="40" height="40"><rect x="6" y="12" width="3" height="24" rx="1" fill="#f59e0b"/><rect x="12" y="12" width="2" height="24" rx="1" fill="#f59e0b"/><rect x="17" y="12" width="4" height="24" rx="1" fill="#f59e0b"/><rect x="24" y="12" width="2" height="24" rx="1" fill="#f59e0b"/><rect x="29" y="12" width="3" height="24" rx="1" fill="#f59e0b"/><rect x="35" y="12" width="2" height="24" rx="1" fill="#f59e0b"/><rect x="40" y="12" width="3" height="24" rx="1" fill="#f59e0b"/></svg>
+        </span>
+        <span class="hub-item-title">Códigos de barras</span>
+</button>
+      <button type="button" class="hub-item hub-item-admin" data-hub-action="admin" data-admin-tab="descargas" role="listitem">
+        <span class="hub-ico" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="40" height="40"><path d="M24 8v22" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/><path d="M16 24l8 8 8-8" stroke="#38bdf8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><rect x="10" y="36" width="28" height="4" rx="2" fill="#64748b"/></svg>
+        </span>
+        <span class="hub-item-title">Descargas</span>
+</button>
+      <button type="button" class="hub-item hub-item-admin" data-hub-action="admin" data-admin-tab="respaldos" role="listitem">
+        <span class="hub-ico" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="40" height="40"><ellipse cx="24" cy="16" rx="14" ry="6" fill="#94a3b8"/><path d="M10 16v12c0 3.3 6.3 6 14 6s14-2.7 14-6V16" fill="none" stroke="#64748b" stroke-width="2.5"/><path d="M10 22c0 3.3 6.3 6 14 6s14-2.7 14-6" fill="none" stroke="#64748b" stroke-width="2.5"/></svg>
+        </span>
+        <span class="hub-item-title">Respaldos</span>
+</button>
+      <button type="button" class="hub-item hub-item-admin" data-hub-action="admin" data-admin-tab="vista" role="listitem">
+        <span class="hub-ico" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="40" height="40"><ellipse cx="24" cy="24" rx="16" ry="10" fill="none" stroke="#a78bfa" stroke-width="2.5"/><circle cx="24" cy="24" r="6" fill="#a78bfa"/></svg>
+        </span>
+        <span class="hub-item-title">Vista previa</span>
+</button>
+      <button type="button" class="hub-item hub-item-admin" data-hub-action="admin" data-admin-tab="reporte" role="listitem">
+        <span class="hub-ico" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="40" height="40"><rect x="10" y="8" width="28" height="32" rx="3" fill="#334155"/><path d="M16 16h16M16 22h16M16 28h10" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round"/><rect x="16" y="32" width="10" height="4" rx="1" fill="#22c55e"/></svg>
+        </span>
+        <span class="hub-item-title">Reporte sistema</span>
+</button>
+      <button type="button" class="hub-item hub-item-admin" data-hub-action="admin" data-admin-tab="clientes" role="listitem">
+        <span class="hub-ico" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="40" height="40"><circle cx="18" cy="16" r="6" fill="#60a5fa"/><circle cx="32" cy="18" r="5" fill="#93c5fd"/><path d="M6 38c0-6 5-10 12-10s12 4 12 10" fill="#3B6EA5"/><path d="M28 38c0-4 3-7 8-7s8 3 8 7" fill="#64748b"/></svg>
+        </span>
+        <span class="hub-item-title">Clientes</span>
+</button>
+      <button type="button" class="hub-item hub-item-admin" data-hub-action="admin" data-admin-tab="pedidos" role="listitem">
+        <span class="hub-ico" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="40" height="40"><path d="M12 14h24l-2 18H14L12 14z" fill="#f97316"/><path d="M16 14V12a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2" fill="none" stroke="#fb923c" stroke-width="2.5"/><circle cx="18" cy="36" r="3" fill="#fdba74"/><circle cx="30" cy="36" r="3" fill="#fdba74"/></svg>
+        </span>
+        <span class="hub-item-title">Pedidos sugeridos</span>
+</button>
+      <button type="button" class="hub-item hub-item-admin" data-hub-action="admin" data-admin-tab="sesiones" role="listitem">
+        <span class="hub-ico" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="40" height="40"><circle cx="24" cy="24" r="14" fill="none" stroke="#34d399" stroke-width="3"/><circle cx="24" cy="24" r="5" fill="#34d399"/><path d="M24 10v4M24 34v4M10 24h4M34 24h4" stroke="#6ee7b7" stroke-width="2.5" stroke-linecap="round"/></svg>
+        </span>
+        <span class="hub-item-title">Sesiones</span>
+</button>
+      <button type="button" class="hub-item hub-item-admin" data-hub-action="admin" data-admin-tab="vencimientos" role="listitem">
+        <span class="hub-ico" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="40" height="40"><circle cx="24" cy="24" r="14" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.5"/><path d="M24 16v10l6 4" stroke="#d97706" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        </span>
+        <span class="hub-item-title">Por vencer</span>
+</button>
+    </div>
+    <p class="hub-version" id="hubVersion">v1.4.4</p>
+  </div>
+</div>
+
+<div class="container" id="appContainer">
+
+    <!-- ============================================================
+    HEADER
+    ============================================================ -->
+    <header class="header">
+        <div class="logo" title="IEM GROUP">
+            <img src="logo-iem.png" alt="IEM GROUP · LAIVE">
+        </div>
+        <span class="badge offline-badge" id="offlineBadge" hidden>📴 Offline</span>
+<span id="syncStatusBadge" class="sync-status-badge" hidden aria-live="polite"></span>
+        <!-- Badge pendientes oculto: reintento automático en segundo plano (sin UI) -->
+        <span id="pendientesBadge" class="pendientes-badge" hidden aria-hidden="true" style="display:none!important;" title=""></span>
+        <span class="badge badge-usuario" id="usuarioBadge" title="Usuario con sesión activa en este dispositivo"><span class="dot-activo"></span><span id="usuarioBadgeTexto">-</span></span>
+        <div class="header-actions">
+            <!-- Alerta vencidos: visible en PC (header); en móvil se usa el FAB flotante -->
+            <button type="button" class="btn-alerta-venc btn-alerta-ok" id="btnAlertaVenc" hidden title="Productos por vencer (15 días o menos)" aria-label="Alertas de vencimiento" aria-expanded="false" aria-controls="panelAlertaVenc">
+                <span class="alerta-venc-ico" aria-hidden="true">⚠</span>
+                <span class="alerta-venc-dot" id="alertaVencDot" hidden></span>
+                <span class="alerta-venc-count" id="alertaVencCount">0</span>
+            </button>
+            <div class="panel-alerta-venc" id="panelAlertaVenc" hidden role="dialog" aria-label="Productos por vencer">
+                <div class="panel-alerta-venc-head">
+                    <strong>Por vencer ≤ 15 días</strong>
+                    <button type="button" class="panel-alerta-cerrar" id="btnCerrarAlertaVenc" aria-label="Cerrar">✕</button>
+                </div>
+                
+                <ul class="panel-alerta-lista" id="listaAlertaVenc"></ul>
+            </div>
+            <button class="theme-toggle theme-toggle-always" id="themeToggleBtn" type="button" title="Cambiar tema claro/oscuro" aria-label="Cambiar entre tema claro y oscuro">🌓</button>
+            <button type="button" class="btn-hub-home" id="btnHubHome" title="Menú principal" aria-label="Volver al menú principal" style="display:none;">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+            </button>
+            <button class="btn-logout" id="logoutBtn" type="button" title="Salir" aria-label="Salir">
+                <svg class="btn-logout-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+                    <path fill="currentColor" d="M5 3a2 2 0 0 0-2 2v1.24a2 2 0 0 0 2 2h6a1 1 0 1 0 0-2H5V5h6a1 1 0 1 0 0-2H5zm9.3 4.3a1 1 0 0 1 1.4 0l4 4a1 1 0 0 1 0 1.4l-4 4a1 1 0 1 1-1.4-1.4L16.58 13H10a1 1 0 1 1 0-2h6.58l-2.28-2.3a1 1 0 0 1 0-1.4z"/>
+                </svg>
+            </button>
+            <!-- Solo admin: menú con opciones administrativas -->
+            <div class="header-menu-wrap" id="headerMenuWrap" style="display:none!important;" hidden aria-hidden="true">
+                <button type="button" class="header-menu-btn" id="headerMenuBtn" title="Administración" aria-label="Menú administración" aria-expanded="false" aria-haspopup="true" aria-controls="headerMenuDropdown">
+                    <span class="header-menu-icon" aria-hidden="true">☰</span>
+                </button>
+                <div class="header-menu-dropdown" id="headerMenuDropdown" role="menu" hidden>
+                    <button type="button" class="header-menu-item header-menu-item-salir" role="menuitem" data-header-action="logout">
+                        <span class="hmi-icon hmi-text-ico" aria-hidden="true">⎋</span><span class="hmi-label">Cerrar sesión</span>
+                    </button>
+                    <div class="header-menu-divider" role="separator"></div>
+                    <button type="button" class="header-menu-item" role="menuitem" data-admin-goto="subir">
+                        <span class="hmi-icon hmi-text-ico" aria-hidden="true">↑</span><span class="hmi-label">Subir Excel</span>
+                    </button>
+                    <button type="button" class="header-menu-item" role="menuitem" data-admin-goto="catalogo">
+                        <span class="hmi-icon hmi-text-ico" aria-hidden="true">☰</span><span class="hmi-label">Catálogo</span>
+                    </button>
+                    <button type="button" class="header-menu-item" role="menuitem" data-admin-goto="barras">
+                        <span class="hmi-icon ico-scan" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M2 7h1.5v10H2V7zm2.5 0H6v10H4.5V7zM7 7h1.2v10H7V7zm2.2 0h2v10h-2V7zm3 0h1.2v10H12.2V7z"/><path fill="currentColor" d="M15 7h3.5v3.5H15V7zm1 1v1.5h1.5V8H16zm2.5 4.5H22V15h-1.5v1.5H18v-1.5h-.5v-1.5H18v-1.5h-.5zM15 15h2v2h-2v-2z"/></svg></span><span class="hmi-label">Barras / QR</span>
+                    </button>
+                    <button type="button" class="header-menu-item" role="menuitem" data-admin-goto="descargas">
+                        <span class="hmi-icon hmi-text-ico" aria-hidden="true">↓</span><span class="hmi-label">Descargas</span>
+                    </button>
+                    <button type="button" class="header-menu-item" role="menuitem" data-admin-goto="respaldos">
+                        <span class="hmi-icon hmi-text-ico" aria-hidden="true">▣</span><span class="hmi-label">Respaldos</span>
+                    </button>
+                    <button type="button" class="header-menu-item" role="menuitem" data-admin-goto="vista">
+                        <span class="hmi-icon hmi-text-ico" aria-hidden="true">◎</span><span class="hmi-label">Vista previa</span>
+                    </button>
+                    <button type="button" class="header-menu-item" role="menuitem" data-admin-goto="reporte">
+                        <span class="hmi-icon hmi-text-ico" aria-hidden="true">▤</span><span class="hmi-label">Reporte sistema</span>
+                    </button>
+                    <button type="button" class="header-menu-item" role="menuitem" data-admin-goto="clientes">
+                        <span class="hmi-icon hmi-text-ico" aria-hidden="true">○</span><span class="hmi-label">Clientes</span>
+                    </button>
+                    <button type="button" class="header-menu-item" role="menuitem" data-admin-goto="pedidos">
+                        <span class="hmi-icon hmi-text-ico" aria-hidden="true">◇</span><span class="hmi-label">Pedidos sugeridos</span>
+                    </button>
+                    <button type="button" class="header-menu-item" role="menuitem" data-admin-goto="sesiones">
+                        <span class="hmi-icon hmi-text-ico" aria-hidden="true">⊕</span><span class="hmi-label">Sesiones</span>
+                    </button>
+                    <button type="button" class="header-menu-item" role="menuitem" data-admin-goto="vencimientos">
+                        <span class="hmi-icon hmi-text-ico" aria-hidden="true">◷</span><span class="hmi-label">Por vencer</span>
+                    </button>
+                    <div class="header-menu-footer">
+                        <span class="version">v1.3.5 · Admin</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ============================================================
+    BUSCADOR
+    ============================================================ -->
+    <main id="mainContent">
+    <section class="card" id="searchSection" aria-label="Búsqueda de productos">
+        <div class="search-row" role="search">
+            <label for="searchInput" class="sr-only">Buscar producto por código, descripción, marca o barras</label>
+            <input type="text" id="searchInput" aria-describedby="searchStatus" placeholder="Buscar por código, descripción, marca o barras..." autofocus autocomplete="off">
+            <div class="search-suggest-wrap" id="searchSuggestWrap" aria-hidden="true"></div>
+            <div class="filtro-tipo-row" role="group" aria-label="Filtro Frios o Secos">
+                <button type="button" class="filtro-tipo-btn active" data-filtro-tipo="">Todos</button>
+                <button type="button" class="filtro-tipo-btn" data-filtro-tipo="FRIOS">❄️ Frios</button>
+                <button type="button" class="filtro-tipo-btn" data-filtro-tipo="SECOS">📦 Secos</button>
+            </div>
+            <button class="btn btn-primary" id="searchButton" type="button" title="Buscar"><span class="btn-icon">🔎</span><span class="btn-label"> Buscar</span></button>
+            <button class="btn btn-outline btn-scan" id="scanBarcodeBtn" type="button" title="Escanear código de barras o QR" aria-label="Escanear código de barras o QR">
+                <span class="btn-icon btn-scan-ico ico-scan" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="22" height="22" focusable="false">
+                        <!-- Barras -->
+                        <path fill="currentColor" d="M2 7h1.5v10H2V7zm2.5 0H6v10H4.5V7zM7 7h1.2v10H7V7zm2.2 0h2v10h-2V7zm3 0h1.2v10H12.2V7z"/>
+                        <!-- QR -->
+                        <path fill="currentColor" d="M15 7h3.5v3.5H15V7zm1 1v1.5h1.5V8H16zm2.5 4.5H22V15h-1.5v1.5H18v-1.5h-.5v-1.5H18v-1.5h-.5zM15 15h2v2h-2v-2z"/>
+                        <!-- Marco de escaneo -->
+                        <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M3 5h3M3 5v3M21 5h-3M21 5v3M3 19h3M3 19v-3M21 19h-3M21 19v-3"/>
+                    </svg>
+                </span>
+                <span class="btn-label"> Escanear código</span>
+            </button>
+            <button class="btn btn-outline" id="refreshDriveBtn" title="Actualizar catálogo desde Supabase" aria-label="Actualizar"><span class="btn-icon">↻</span><span class="btn-label"> Actualizar</span></button>
+        </div>
+        <div class="vincular-barras-row" id="vincularBarrasRow" style="display:none;">
+            <button type="button" class="btn btn-outline btn-sm" id="btnVincularBarras">
+                <span class="btn-icon">🏷️</span><span class="btn-label"> Vincular código de barras a este producto</span>
+            </button>
+        </div>
+        <div id="fileStatus">(cargando desde Supabase...)</div>
+    </section>
+
+    <!-- ============================================================
+    RESULTADOS + CANTIDADES
+    ============================================================ -->
+    <section class="card" id="resultsSection" aria-live="polite" aria-relevant="additions text">
+        <p id="searchStatus" class="sr-only" aria-live="polite"></p>
+        <div class="pc-panel-lista" id="pcPanelLista">
+        <div class="results-header">
+            <div class="count">📋 Resultados <span id="resultCount">0</span></div>
+            <div class="stats">
+                <span><span class="label">📦 Cajas:</span> <span id="cajasCount">0</span></span>
+                <span><span class="label">🧩 Unidades:</span> <span id="unidadesCount">0</span></span>
+            </div>
+        </div>
+        <div id="resultList" role="listbox" aria-label="Resultados de búsqueda" class="result-list result-list-collapsed"></div>
+        </div><!-- /.pc-panel-lista -->
+
+        <div class="pc-panel-conteo" id="pcPanelConteo">
+        <!-- Tarjeta de producto seleccionado (visible solo en móvil) -->
+        <div class="producto-activo-card" id="productoActivoCard">
+            <div class="pa-topbar">
+                <button type="button" class="pa-cambiar-btn" id="btnCambiarProducto">← Cambiar producto</button>
+                <button type="button" class="pa-scan-btn" id="btnScanProducto" title="Escanear / vincular código de barras o QR" style="display:none;" aria-label="Escanear código de barras o QR">
+                    <span class="ico-scan" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="22" height="22" focusable="false">
+                            <path fill="currentColor" d="M2 7h1.5v10H2V7zm2.5 0H6v10H4.5V7zM7 7h1.2v10H7V7zm2.2 0h2v10h-2V7zm3 0h1.2v10H12.2V7z"/>
+                            <path fill="currentColor" d="M15 7h3.5v3.5H15V7zm1 1v1.5h1.5V8H16zm2.5 4.5H22V15h-1.5v1.5H18v-1.5h-.5v-1.5H18v-1.5h-.5zM15 15h2v2h-2v-2z"/>
+                            <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M3 5h3M3 5v3M21 5h-3M21 5v3M3 19h3M3 19v-3M21 19h-3M21 19v-3"/>
+                        </svg>
+                    </span>
+                </button>
+            </div>
+            <div class="pa-hero">
+                <div class="pa-img-wrap">
+                    <img class="pa-img" id="paImg" src="" alt="" style="display:none;" loading="lazy" decoding="async">
+                    <div class="pa-img-placeholder" id="paImgPlaceholder" aria-hidden="true">📦</div>
+                </div>
+                <div class="pa-cod-badge" id="paCodBadge" title="Código de producto">—</div>
+            </div>
+            <div class="pa-header">
+                <div class="pa-info">
+                    <div class="pa-descripcion" id="paDescripcion"></div>
+                    <div class="pa-codigo" id="paCodigo"></div>
+                </div>
+                <div class="pa-header-right"></div>
+            </div>
+            <div class="pa-meta">
+                <div class="pa-meta-info">
+                    <span class="pa-chip"><span class="pa-chip-label">UM</span> <strong id="paUnidad">-</strong></span>
+                    <span class="pa-chip"><span class="pa-chip-label">Empaque</span> <strong id="paFactor">-</strong></span>
+                    <span class="pa-chip pa-chip-stock"><span class="pa-chip-label">Stock</span> <strong id="paStock">-</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cantidades -->
+        <div class="cantidad-row">
+            <div class="group cajas-group" id="cajasGroup">
+                <label for="txtCajas">📦 Cajas</label>
+                <input type="number" id="txtCajas" value="0" min="0" disabled>
+            </div>
+            <div class="group unidades-group" id="unidadesGroup">
+                <label for="txtUnidades">🧩 Unidades</label>
+                <input type="number" id="txtUnidades" value="0" min="0">
+            </div>
+            <span class="info-text" id="infoFactor">Factor: 1</span>
+        </div>
+
+        <!-- Aviso de conversión automática: aparece cuando se escriben más
+             unidades sueltas que el factor de empaque, indicando en qué se
+             va a convertir (cajas + unidades) al salir del campo. -->
+        <div class="conversion-hint" id="conversionHint"></div>
+
+        <!-- Total calculado (visible solo en móvil, en modo selección) -->
+        <div class="pa-total-box" id="paTotalBox">
+            <span class="pa-total-label">TOTAL CALCULADO:</span>
+            <span class="pa-total-value"><span id="paTotalValor">0</span> <span id="paTotalUnidad"></span></span>
+        </div>
+
+        <!-- Fecha de vencimiento (plegable: fechas de lote + selectores) -->
+        <div class="venc-block hidden" id="vencBlock">
+            <button type="button" class="venc-toggle" id="vencToggle" aria-expanded="false" aria-controls="vencBody">
+                <span class="venc-toggle-label">📅 Fecha de vencimiento</span>
+                <span class="venc-toggle-hint" id="vencToggleHint">tocar para ver fechas del lote</span>
+                <span class="venc-toggle-ico" aria-hidden="true">▾</span>
+            </button>
+            <div class="venc-body collapsed" id="vencBody">
+                <div class="venc-history" id="vencHistoryWrap">
+                    <div class="venc-chips" id="vencChips"></div>
+                </div>
+                <div class="venc-selects">
+                    <div class="venc-select-group">
+                        <div class="venc-select-label">DÍA</div>
+                        <select class="venc-select" id="selDia"></select>
+                    </div>
+                    <div class="venc-select-group">
+                        <div class="venc-select-label">MES</div>
+                        <select class="venc-select" id="selMes"></select>
+                    </div>
+                </div>
+                <div class="year-tabs" id="yearTabs"></div>
+                <div class="fefo-hint" id="fefoHint" hidden role="status" aria-live="polite"></div>
+            </div>
+            <button class="btn btn-success btn-guardar-grande" id="btnRegistrarFisico"><span class="btn-icon">💾</span><span class="btn-label"> GUARDAR CONTEO</span></button>
+        </div>
+        </div><!-- /.pc-panel-conteo -->
+    </section>
+
+    <!-- ============================================================
+    INVENTARIO FÍSICO
+    ============================================================ -->
+    <section class="card" id="inventarioFisicoSection">
+        <div class="card-header collapsible" id="diffCardHeader" role="button" tabindex="0" aria-expanded="false" aria-controls="diffCardBody" title="Maximizar inventario físico">
+            <h2>📊 Inventario Físico</h2>
+            <span class="badge" id="diffCount">0 registros</span>
+            <span class="card-toggle card-toggle-max" id="diffCardToggle" aria-hidden="true" title="Pantalla completa">⛶</span>
+        </div>
+        <div class="card-body-collapsible" id="diffCardBody">
+        <div class="card-body-inner">
+        <div class="card-actions-row">
+                <button class="btn btn-primary btn-sm" id="enviarInventarioBtn" title="Enviar a la nube el conteo ya revisado">
+                    <span class="btn-icon">📤</span><span class="btn-label"> Enviar inventario</span>
+                </button>
+                <button class="btn btn-success btn-sm" id="exportDiffBtn"><span class="btn-icon">📊</span><span class="btn-label"> Excel</span></button>
+                <button class="btn btn-primary btn-sm" id="exportPdfSelladoBtn" title="Descargar PDF sellado (solo lectura / autoría IEM)"><span class="btn-icon">📄</span><span class="btn-label"> PDF sellado</span></button>
+                <button class="btn btn-danger btn-sm" id="clearDiffBtn" title="Limpiar conteo físico"><span class="btn-icon">🗑️</span><span class="btn-label"> Limpiar</span></button>
+        </div>
+        <div class="diff-filtro-row" id="diffFiltroRow" role="group" aria-label="Filtrar inventario físico">
+            <button type="button" class="diff-filtro-btn active" data-diff-filtro="todos">Todos</button>
+            <button type="button" class="diff-filtro-btn" data-diff-filtro="diff">Con diferencia</button>
+            <button type="button" class="diff-filtro-btn diff-filtro-vencer" data-diff-filtro="por_vencer">⚠ Por vencer</button>
+            <span class="diff-filtro-stats" id="diffFiltroStats"></span>
+        </div>
+        <div class="diff-busqueda-row" id="diffBusquedaRow">
+            <input type="search" id="diffBusquedaInput" class="diff-busqueda-input" placeholder="Buscar código, descripción o marca…" autocomplete="off" spellcheck="false" aria-label="Buscar en inventario físico">
+            <button type="button" class="diff-busqueda-clear" id="diffBusquedaClear" title="Limpiar búsqueda" aria-label="Limpiar" hidden>✕</button>
+        </div>
+        <div class="table-wrap">
+            <table class="diff-table" id="diffTable">
+                <thead><tr>
+                    <th>#</th>
+                    <th class="diff-sort" data-diff-sort="codigo" title="Ordenar por código">Código <span class="diff-sort-ico" aria-hidden="true"></span></th>
+                    <th class="diff-sort" data-diff-sort="descripcion" title="Ordenar por descripción">Descripción <span class="diff-sort-ico" aria-hidden="true"></span></th>
+                    <th class="diff-sort" data-diff-sort="teorico" title="Ordenar por teórico">Teórico <span class="diff-sort-ico" aria-hidden="true"></span></th>
+                    <th class="diff-sort" data-diff-sort="fisico" title="Ordenar por físico">Físico <span class="diff-sort-ico" aria-hidden="true"></span></th>
+                    <th class="diff-sort" data-diff-sort="diferencia" title="Ordenar por diferencia">Diferencia <span class="diff-sort-ico" aria-hidden="true"></span></th>
+                    <th class="diff-sort" data-diff-sort="vencimiento" title="Ordenar por vencimiento">Vencimiento <span class="diff-sort-ico" aria-hidden="true"></span></th>
+                    <th class="diff-sort" data-diff-sort="fecha" title="Ordenar por fecha">Fecha/Hora <span class="diff-sort-ico" aria-hidden="true"></span></th>
+                    <th class="diff-sort" data-diff-sort="usuario" title="Ordenar por usuario">Usuario <span class="diff-sort-ico" aria-hidden="true"></span></th>
+                    <th>Acción</th>
+                </tr></thead>
+                <tbody id="diffBody">
+                    <tr><td colspan="10" class="empty-message">No hay productos contados aún.</td></tr>
+                </tbody>
+                <tfoot id="diffFoot" style="display:none;">
+                    <tr>
+                        <td colspan="3" style="text-align:right;">Totales</td>
+                        <td id="diffTotalTeorico" style="color:var(--heading-color);">0</td>
+                        <td id="diffTotalFisico" style="color:var(--heading-color);">0</td>
+                        <td id="diffTotalDiferencia" style="color:var(--heading-color);">0</td>
+                        <td></td><td></td><td></td><td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <div class="mobile-item-list" id="diffMobileList"></div>
+        <div class="diff-totales" id="diffResumen" style="display:none;">
+            <span>📦 Teórico: <strong id="resTeorico">0</strong></span>
+            <span>🔎 Físico: <strong id="resFisico">0</strong></span>
+            <span>📊 Diferencia: <strong id="resDiferencia">0</strong></span>
+            <span>Contados: <strong id="resContados">0</strong></span>
+        </div>
+        </div>
+        </div>
+    </section>
+    </main>
+</div>
+
+    <!-- ============================================================
+    PANEL ADMINISTRADOR — Importar Excel a Supabase
+    ============================================================ -->
+    <div class="admin-overlay" id="adminOverlay" aria-hidden="true">
+        <div class="admin-panel admin-panel-window" role="region" aria-labelledby="adminPanelTitle">
+            <div class="admin-panel-header admin-panel-header-compact">
+                <h2 id="adminPanelTitle" class="admin-panel-title-sr">Administración</h2>
+                <span class="admin-header-spacer" aria-hidden="true"></span>
+                <button type="button" class="admin-close" id="adminCloseBtn" title="Cerrar" aria-label="Cerrar">
+                    <span class="admin-close-label">Volver</span><span class="admin-close-x" aria-hidden="true">✕</span>
+                </button>
+            </div>
+            <div class="admin-layout">
+                <!-- Pestañas: en móvil barra horizontal; en escritorio menú lateral -->
+                <div class="admin-nav-wrap" id="adminNavWrap">
+                <button type="button" class="admin-nav-toggle" id="adminNavToggle" aria-expanded="true" aria-controls="adminNav" title="Mostrar u ocultar pestañas">
+                    <span class="admin-nav-toggle-ico" aria-hidden="true">▾</span>
+                    <span class="admin-nav-toggle-txt">Menús</span>
+                </button>
+                <nav class="admin-nav" id="adminNav" aria-label="Secciones del panel" role="tablist">
+                    <button type="button" class="admin-nav-btn active" role="tab" aria-selected="true" data-admin-tab="subir" id="tabBtn-subir">
+                        <span class="tab-ico" aria-hidden="true">📤</span><span class="tab-txt">Subir Excel</span>
+                    </button>
+                    <button type="button" class="admin-nav-btn" role="tab" aria-selected="false" data-admin-tab="catalogo" id="tabBtn-catalogo">
+                        <span class="tab-ico" aria-hidden="true">🔎</span><span class="tab-txt">Catálogo</span>
+                    </button>
+                    <button type="button" class="admin-nav-btn" role="tab" aria-selected="false" data-admin-tab="barras" id="tabBtn-barras">
+                        <span class="tab-ico ico-scan" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M2 7h1.5v10H2V7zm2.5 0H6v10H4.5V7zM7 7h1.2v10H7V7zm2.2 0h2v10h-2V7zm3 0h1.2v10H12.2V7z"/><path fill="currentColor" d="M15 7h3.5v3.5H15V7zm1 1v1.5h1.5V8H16zm2.5 4.5H22V15h-1.5v1.5H18v-1.5h-.5v-1.5H18v-1.5h-.5zM15 15h2v2h-2v-2z"/></svg></span><span class="tab-txt">Barras / QR</span>
+                    </button>
+                    <button type="button" class="admin-nav-btn" role="tab" aria-selected="false" data-admin-tab="descargas" id="tabBtn-descargas">
+                        <span class="tab-ico" aria-hidden="true">📊</span><span class="tab-txt">Descargas</span>
+                    </button>
+                    <button type="button" class="admin-nav-btn" role="tab" aria-selected="false" data-admin-tab="respaldos" id="tabBtn-respaldos">
+                        <span class="tab-ico" aria-hidden="true">📦</span><span class="tab-txt">Respaldos</span>
+                    </button>
+                    <button type="button" class="admin-nav-btn" role="tab" aria-selected="false" data-admin-tab="vista" id="tabBtn-vista">
+                        <span class="tab-ico" aria-hidden="true">👁️</span><span class="tab-txt">Vista previa</span>
+                    </button>
+                    <button type="button" class="admin-nav-btn" role="tab" aria-selected="false" data-admin-tab="reporte" id="tabBtn-reporte">
+                        <span class="tab-ico" aria-hidden="true">📋</span><span class="tab-txt">Reporte sistema</span>
+                    </button>
+                    <button type="button" class="admin-nav-btn" role="tab" aria-selected="false" data-admin-tab="pedidos" id="tabBtn-pedidos">
+                        <span class="tab-ico" aria-hidden="true">🛒</span><span class="tab-txt">Pedidos sugeridos</span>
+                    </button>
+                    <button type="button" class="admin-nav-btn" role="tab" aria-selected="false" data-admin-tab="vencimientos" id="tabBtn-vencimientos">
+                        <span class="tab-ico" aria-hidden="true">⚠</span><span class="tab-txt">Por vencer</span>
+                    </button>
+                    <button type="button" class="admin-nav-btn" role="tab" aria-selected="false" data-admin-tab="clientes" id="tabBtn-clientes">
+                        <span class="tab-ico" aria-hidden="true">👤</span><span class="tab-txt">Clientes</span>
+                    </button>
+                    <button type="button" class="admin-nav-btn" role="tab" aria-selected="false" data-admin-tab="sesiones" id="tabBtn-sesiones">
+                        <span class="tab-ico" aria-hidden="true">👥</span><span class="tab-txt">Sesiones</span>
+                    </button>
+                </nav>
+                </div><!-- /admin-nav-wrap -->
+                <div class="admin-swipe-bar" id="adminSwipeBar" aria-hidden="false">
+                    <span>‹ desliza</span>
+                    <strong id="adminSwipeTitle">Menú</strong>
+                    <span>desliza ›</span>
+                </div>
+                <div class="admin-panel-body">
+                    <div class="admin-tab active" id="adminTabSubir" data-admin-panel="subir">
+
+                        <div class="admin-dropzone" id="adminDropzone">
+                            <div class="admin-drop-text">Arrastra el archivo aquí<br>o haz clic para elegir</div>
+                            <input type="file" id="importExcelInput" accept=".xlsx,.xls,.csv" class="admin-file-input">
+                        </div>
+                        <div class="admin-import-modo" style="margin:0.75rem 0;padding:0.75rem;background:var(--input-bg,#f8fafc);border-radius:10px;border:1px solid var(--card-border,#e2e8f0);">
+                            <div style="font-weight:600;margin-bottom:0.5rem;font-size:0.9rem;">Tipo de Excel</div>
+                            <label class="admin-check" style="display:flex;align-items:flex-start;gap:0.5rem;margin-bottom:0.45rem;">
+                                <input type="radio" name="adminImportModo" id="adminModoExistencias" value="existencias" checked>
+                                <span><strong>1 · Existencias</strong></span>
+                            </label>
+                            <label class="admin-check" style="display:flex;align-items:flex-start;gap:0.5rem;margin-bottom:0.45rem;">
+                                <input type="radio" name="adminImportModo" id="adminModoValorado" value="valorado">
+                                <span><strong>2 · Inventario valorado</strong></span>
+                            </label>
+                            <label class="admin-check" style="display:flex;align-items:flex-start;gap:0.5rem;margin-bottom:0.35rem;">
+                                <input type="radio" name="adminImportModo" id="adminModoBase" value="base">
+                                <span><strong>3 · Base Laive</strong></span>
+                            </label>
+                        </div>
+                        <label class="admin-check" title="Existencias no modifica stock; el stock solo lo actualiza Inventario valorado" id="adminSoloCatalogoWrap" style="opacity:.85">
+                            <input type="checkbox" id="adminSoloCatalogo" checked disabled>
+                            Existencias: solo códigos (stock = Inventario valorado)
+                        </label>
+                        <div class="admin-file-name" id="adminFileName"></div>
+                        <div class="admin-actions">
+                            <button type="button" class="btn btn-outline" id="adminCancelBtn">Cancelar</button>
+                            <button type="button" class="btn btn-success" id="adminImportBtn" disabled>
+                                <span class="btn-icon">⬆️</span><span class="btn-label"> Subir a Supabase</span>
+                            </button>
+                        </div>
+                        <p class="admin-status" id="adminStatus"></p>
+                    </div>
+
+                    <div class="admin-tab" id="adminTabCatalogo" data-admin-panel="catalogo" hidden>
+                        <h3 class="admin-subtitle">🔎 Buscar en catálogo completo</h3>
+                        
+                        <div class="admin-warning-box admin-warning-compact" role="note">
+                            <div class="admin-warning-title">Imágenes (Supabase Storage)</div>
+                            <p class="admin-warning-text" style="margin:0.25rem 0 0.4rem;">PC: pega URL y «Importar». Móvil: «Subir foto». Las URLs externas se copian a tu bucket <code>productos</code>.</p>
+                            <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.35rem;">
+                                <button type="button" class="btn btn-success btn-sm" id="btnMigrarImagenesStorage" title="Copia a Storage las imágenes que aún son links externos">☁️ Pasar a Supabase</button>
+                                <button type="button" class="btn btn-outline btn-sm" id="btnReintentarImgFallos" title="Vuelve a intentar solo los códigos que fallaron en la última migración">↻ Reintentar fallos</button>
+                                <button type="button" class="btn btn-primary btn-sm" id="btnBuscarImagenesLaive">🔍 Buscar faltantes (Laive)</button>
+                                <button type="button" class="btn btn-outline btn-sm" id="btnReporteCalidadCatalogo">📋 Calidad catálogo</button>
+                                <button type="button" class="btn btn-danger btn-sm" id="btnBorrarTodasImagenes">🗑️ Borrar todas</button>
+                            </div>
+                            <p id="adminImgBuscarStatus" class="admin-warning-text" style="margin-top:0.5rem;margin-bottom:0;"></p>
+                        </div>
+                        <div class="admin-catalog-search">
+                            <input type="search" id="adminCatalogInput" placeholder="Código, descripción, línea o marca..." autocomplete="off">
+                            <span class="admin-catalog-count" id="adminCatalogCount">0</span>
+                        </div>
+                        <div style="display:flex;flex-wrap:wrap;gap:0.75rem 1rem;margin:0 0 0.65rem;">
+                            <label class="admin-check" style="margin:0;">
+                                <input type="checkbox" id="adminCatalogSoloCero">
+                                Solo <strong>sin stock</strong>
+                            </label>
+                            <label class="admin-check" style="margin:0;">
+                                <input type="checkbox" id="adminCatalogSoloSinImg">
+                                Solo <strong>sin imagen</strong> (habilitados)
+                            </label>
+                        </div>
+                        <div id="adminCatalogList" class="admin-catalog-list">
+                            <p class="admin-sesiones-empty">Escribe para buscar.</p>
+                        </div>
+                    </div>
+
+                    <div class="admin-tab" id="adminTabBarras" data-admin-panel="barras" hidden>
+                        <h3 class="admin-subtitle"><span class="ico-scan" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M2 7h1.5v10H2V7zm2.5 0H6v10H4.5V7zM7 7h1.2v10H7V7zm2.2 0h2v10h-2V7zm3 0h1.2v10H12.2V7z"/><path fill="currentColor" d="M15 7h3.5v3.5H15V7zm1 1v1.5h1.5V8H16zm2.5 4.5H22V15h-1.5v1.5H18v-1.5h-.5v-1.5H18v-1.5h-.5zM15 15h2v2h-2v-2z"/></svg></span> Asociar códigos de barras / QR</h3>
+                        
+                        <!-- Buscador arriba: en móvil el teclado no tapa la lista ni las acciones -->
+                        <div class="admin-sticky-search" id="adminBarrasSearchWrap">
+                            <div class="admin-catalog-search">
+                                <input type="search" id="adminBarrasInput" placeholder="Código, descripción, marca o EAN..." autocomplete="off" enterkeyhint="search">
+                                <span class="admin-catalog-count" id="adminBarrasCount">0</span>
+                            </div>
+                            <label class="admin-check admin-check-compact">
+                                <input type="checkbox" id="adminBarrasSoloSin">
+                                Solo <strong>sin código de barras</strong>
+                            </label>
+                        </div>
+                        <div id="adminBarrasSelected" class="admin-barras-selected">
+                            <p class="admin-sesiones-empty">Selecciona un producto de la lista para asociarle un código de barras o QR.</p>
+                        </div>
+                        <div id="adminBarrasList" class="admin-catalog-list">
+                            <p class="admin-sesiones-empty">Escribe para buscar, o marca «solo sin barras» para listar pendientes.</p>
+                        </div>
+                    </div>
+
+                    <div class="admin-tab" id="adminTabDescargas" data-admin-panel="descargas" hidden>
+                        <h3 class="admin-subtitle">📥 Descargar inventarios terminados</h3>
+
+                        <div class="admin-actions" style="justify-content:stretch; flex-wrap:wrap; gap:0.5rem;">
+                            <button type="button" class="btn btn-primary" id="adminExportInvBtn" style="flex:1;">
+                                <span class="btn-icon">📊</span><span class="btn-label"> Excel del conteo en vivo</span>
+                            </button>
+                            <button type="button" class="btn btn-success" id="adminExportUltimoEnviadoBtn" style="flex:1;">
+                                <span class="btn-icon">📦</span><span class="btn-label"> Excel del último envío archivado</span>
+                            </button>
+                            <button type="button" class="btn btn-outline" id="adminListarEnviadosBtn" style="flex:1;">
+                                <span class="btn-icon">🔄</span><span class="btn-label"> Listar envíos en Supabase</span>
+                            </button>
+                        </div>
+                        <div id="adminListaEnviados" class="admin-lista-enviados" style="margin-top:0.75rem;"></div>
+                    </div>
+
+                    
+                    <div class="admin-tab" id="adminTabRespaldos" data-admin-panel="respaldos" hidden>
+                        <h3 class="admin-subtitle">📦 Respaldos mensuales</h3>
+                        <div class="admin-warning-box admin-warning-compact" id="iemBackupReminder" role="note">
+                            <div class="admin-warning-title">Respaldos</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:0.45rem;margin-top:0.5rem;">
+                                <button type="button" class="btn btn-primary btn-sm" id="btnDescargarExcelSistema">⬇️ Excel sistema</button>
+                                <button type="button" class="btn btn-primary btn-sm" id="btnDescargarConteoMes">⬇️ Conteo del mes</button>
+                                <button type="button" class="btn btn-success btn-sm" id="btnDescargarAmbosYLimpiar">⬇️ Ambos + limpiar nube</button>
+                                <button type="button" class="btn btn-danger btn-sm" id="btnLimpiarCodigosSap">🧹 Limpiar todos los duplicados (SAP / fábrica)</button>
+                            </div>
+                            <p class="admin-warning-text" id="iemBackupStatus" style="margin-top:0.5rem;margin-bottom:0;"></p>
+                        </div>
+                    </div>
+
+                    <div class="admin-tab" id="adminTabVista" data-admin-panel="vista" hidden>
+                        <h3 class="admin-subtitle">👁️ Vista previa del inventario</h3>
+
+                        <p class="admin-lead" style="margin:0 0 0.4rem;font-size:0.82rem;color:var(--text-muted);">
+                            Para corregir el inventario en el otro sistema, usa <strong>Envío archivado</strong> (lo que ya se envió).
+                        </p>
+                        <div class="filtro-tipo-row" role="group" aria-label="Fuente del reporte" style="margin-bottom:0.35rem;">
+                            <button type="button" class="filtro-tipo-btn active" data-vista-fuente="enviado">📦 Envío archivado</button>
+                            <button type="button" class="filtro-tipo-btn" data-vista-fuente="vivo">🟢 Conteo en vivo</button>
+                        </div>
+                        <div id="vistaEnvioMeta" class="admin-lead" style="display:none;margin:0.25rem 0 0.35rem;font-size:0.85rem;"></div>
+                        <select id="vistaEnvioSelect" aria-label="Elegir envío archivado" style="display:none;width:100%;max-width:100%;margin:0 0 0.5rem;padding:0.45rem 0.6rem;border-radius:8px;border:1px solid var(--card-border);background:var(--input-bg);color:inherit;font-size:0.88rem;">
+                            <option value="">Cargando envíos…</option>
+                        </select>
+                        
+                        <div class="filtro-tipo-row filtro-tipo-vista" role="group" aria-label="Filtro Frios o Secos en vista">
+                            <button type="button" class="filtro-tipo-btn active" data-filtro-tipo="">Todos</button>
+                            <button type="button" class="filtro-tipo-btn" data-filtro-tipo="FRIOS">❄️ Frios</button>
+                            <button type="button" class="filtro-tipo-btn" data-filtro-tipo="SECOS">📦 Secos</button>
+                        </div>
+                        <div class="admin-actions" style="justify-content:stretch;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem;">
+                            <button type="button" class="btn btn-outline btn-sm" id="adminRefreshVistaBtn">
+                                <span class="btn-icon">↻</span><span class="btn-label"> Actualizar vista</span>
+                            </button>
+                            <button type="button" class="btn btn-primary btn-sm" id="adminPdfInvBtn">
+                                <span class="btn-icon">📄</span><span class="btn-label"> Exportar PDF</span>
+                            </button>
+                            <button type="button" class="btn btn-success btn-sm" id="adminExcelEnvioVistaBtn" title="Descargar Excel del envío que estás viendo">
+                                <span class="btn-icon">📊</span><span class="btn-label"> Excel del envío</span>
+                            </button>
+                        </div>
+                        <div id="adminVistaPreview" class="admin-vista-preview">
+                            <p class="admin-sesiones-empty">Cargando vista previa...</p>
+                        </div>
+                    </div>
+
+                    <div class="admin-tab" id="adminTabReporte" data-admin-panel="reporte" hidden>
+                        <h3 class="admin-subtitle">📋 Reporte de inventario del sistema</h3>
+                        
+                        <div class="filtro-tipo-row filtro-tipo-reporte" role="group" aria-label="Filtro Frios o Secos en reporte sistema">
+                            <button type="button" class="filtro-tipo-btn active" data-filtro-tipo-reporte="">Todos</button>
+                            <button type="button" class="filtro-tipo-btn" data-filtro-tipo-reporte="FRIOS">❄️ Frios</button>
+                            <button type="button" class="filtro-tipo-btn" data-filtro-tipo-reporte="SECOS">📦 Secos</button>
+                        </div>
+                        <div class="admin-actions" style="justify-content:stretch;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem;">
+                            <button type="button" class="btn btn-outline btn-sm" id="adminRefreshReporteBtn">
+                                <span class="btn-icon">↻</span><span class="btn-label"> Actualizar reporte</span>
+                            </button>
+                            <button type="button" class="btn btn-primary btn-sm" id="adminPdfReporteBtn">
+                                <span class="btn-icon">📄</span><span class="btn-label"> Exportar PDF</span>
+                            </button>
+                        </div>
+                        <div id="adminReportePreview" class="admin-vista-preview">
+                            <p class="admin-sesiones-empty">Cargando reporte del sistema...</p>
+                        </div>
+                    </div>
+
+                    
+                <div class="admin-tab" data-admin-panel="pedidos" role="tabpanel" hidden>
+                    <div class="admin-section">
+                        <h3 class="admin-section-title">🛒 Pedidos sugeridos a Laive</h3>
+                        <p class="admin-lead" style="margin:0 0 0.6rem;font-size:0.82rem;color:var(--text-muted);">Sugerencias de vendedores para armar el <strong>pedido a Laive</strong>. No modifica el inventario ni el conteo físico.</p>
+                        
+                        <div class="admin-actions-row" style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin-bottom:0.75rem;">
+                            <button type="button" class="btn btn-outline btn-sm" id="adminRefreshPedidosBtn">
+                                <span class="btn-icon">↻</span><span class="btn-label"> Actualizar</span>
+                            </button>
+                            <select id="adminPedidosEstado" class="admin-select" style="min-width:140px;">
+                                <option value="">Todos los estados</option>
+                                <option value="pendiente" selected>Pendiente</option>
+                                <option value="atendido">Atendido</option>
+                                <option value="rechazado">Rechazado</option>
+                            </select>
+                            <input type="search" id="adminPedidosFiltro" placeholder="Vendedor, código, nota..." style="flex:1;min-width:160px;" autocomplete="off">
+                        </div>
+                        <div style="margin:0.5rem 0 0.75rem;">
+                            <button type="button" class="btn btn-primary btn-sm" id="btnPedidosConsolidado">📋 Lote de atención (consolidar y atender todo)</button>
+                        </div>
+                        <div id="adminPedidosList" class="admin-pedidos-list">
+                            <p class="admin-sesiones-empty">Cargando…</p>
+                        </div>
+                        <div id="adminPedidoDetalle" class="admin-pedido-detalle" hidden></div>
+                    </div>
+                </div>
+
+                    <div class="admin-tab" id="adminTabVencimientos" data-admin-panel="vencimientos" role="tabpanel" hidden>
+                        <h3 class="admin-section-title">⚠ Vencimientos</h3>
+                        <p class="admin-lead" style="margin:0 0 0.65rem;font-size:0.82rem;color:var(--text-muted);">Elige una vista: <strong>Vencidos</strong> o <strong>Por vencer</strong> (listas separadas).</p>
+
+                        <div class="admin-venc-vistas" role="tablist" aria-label="Vista de vencimientos" style="display:grid;grid-template-columns:1fr 1fr;gap:0.65rem;margin-bottom:0.85rem;">
+                            <button type="button" class="admin-venc-vista-card" id="vencVistaVencidos" data-admin-venc-vista="vencidos" aria-selected="false" style="text-align:left;padding:0.85rem 1rem;border-radius:12px;border:2px solid var(--border, #e2e8f0);background:var(--card, #fff);cursor:pointer;">
+                                <div style="font-weight:700;font-size:1rem;">🔴 Vencidos</div>
+                                <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.25rem;">Ya pasaron la fecha · <span id="vencCountVencidos">0</span></div>
+                            </button>
+                            <button type="button" class="admin-venc-vista-card active" id="vencVistaPorVencer" data-admin-venc-vista="por_vencer" aria-selected="true" style="text-align:left;padding:0.85rem 1rem;border-radius:12px;border:2px solid var(--primary, #3B6EA5);background:rgba(59,110,165,0.08);cursor:pointer;">
+                                <div style="font-weight:700;font-size:1rem;">🟡 Por vencer</div>
+                                <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.25rem;">Aún no vencen · <span id="vencCountPorVencer">0</span></div>
+                            </button>
+                        </div>
+
+                        <div class="admin-actions-row admin-venc-toolbar" style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin-bottom:0.75rem;">
+                            <button type="button" class="btn btn-outline btn-sm" id="adminRefreshVencBtn">
+                                <span class="btn-icon">↻</span><span class="btn-label"> Actualizar</span>
+                            </button>
+                            <div class="admin-venc-filtros" id="adminVencRangoPorVencer" role="group" aria-label="Rango por vencer">
+                                <button type="button" class="diff-filtro-btn" data-admin-venc-dias="7">≤ 7 días</button>
+                                <button type="button" class="diff-filtro-btn active" data-admin-venc-dias="15">≤ 15 días</button>
+                                <button type="button" class="diff-filtro-btn" data-admin-venc-dias="30">≤ 30 días</button>
+                            </div>
+                            <input type="search" id="adminVencFiltro" placeholder="Código o descripción..." style="flex:1;min-width:140px;" autocomplete="off">
+                            <span class="admin-catalog-count" id="adminVencCount">0</span>
+                        </div>
+                        <p class="admin-status" id="adminVencStatus"></p>
+                        <div class="table-wrap admin-venc-table-wrap">
+                            <table class="diff-table admin-venc-table" id="adminVencTable">
+                                <thead><tr>
+                                    <th>#</th><th>Código</th><th>Descripción</th><th>Vencimiento</th>
+                                    <th>Días</th><th>Cantidad</th><th>Usuario</th><th>Registrado</th>
+                                </tr></thead>
+                                <tbody id="adminVencBody">
+                                    <tr><td colspan="8" class="empty-message">Cargando…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="adminVencMobile" class="mobile-item-list admin-venc-mobile"></div>
+                    </div>
+<div class="admin-tab" id="adminTabClientes" data-admin-panel="clientes" hidden>
+                        <h3 class="admin-subtitle">👤 Catálogo de clientes</h3>
+                        
+                        <div class="admin-catalog-search">
+                            <input type="search" id="adminClienteInput" placeholder="Código, nombre, DNI, distrito, zona..." autocomplete="off" enterkeyhint="search">
+                            <span class="admin-catalog-count" id="adminClienteCount">0</span>
+                        </div>
+                        <p class="admin-status" id="adminClientesStatus"></p>
+                        <div id="adminClienteList" class="admin-catalog-list">
+                            <p class="admin-sesiones-empty">Escribe para buscar clientes.</p>
+                        </div>
+                        <!-- Subir Excel: acción secundaria. Botón explícito = más fiable en móvil -->
+                        <details class="admin-import-sec" id="adminClientesImportBox">
+                            <summary>Actualizar base de clientes (Excel)</summary>
+                            <p class="admin-status" style="margin:0.35rem 0;">Acepta <strong>CLIENTES SEGMENTADOS</strong> (código, segmento, vendedor, lat/long). Primero ejecuta el SQL de columnas en Supabase.</p>
+                            <button type="button" class="btn btn-outline btn-sm admin-import-sec-btn" id="adminClientesImportBtn">
+                                <span class="btn-icon">⬆️</span><span class="btn-label"> Elegir archivo Excel</span>
+                            </button>
+                            <input type="file" id="importClientesInput" accept=".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+                            <p class="admin-status" id="adminClientesImportStatus" style="margin-top:0.45rem;"></p>
+                        </details>
+                    </div>
+
+                    <div class="admin-tab" id="adminTabSesiones" data-admin-panel="sesiones" hidden>
+                        <h3 class="admin-subtitle">👥 Usuarios conectados</h3>
+                        
+                        <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.5rem;">
+                        <button type="button" class="btn btn-outline btn-sm" id="adminRefreshSesionesBtn">
+                            <span class="btn-icon">↻</span><span class="btn-label"> Actualizar lista</span>
+                        </button>
+                        <button type="button" class="btn btn-outline btn-sm" id="adminLimpiarSesionesBtn" title="Borra sesiones con ping antiguo o cierre pendiente">
+                            <span class="btn-icon">🧹</span><span class="btn-label"> Limpiar inactivas</span>
+                        </button>
+                        </div>
+                        <div id="adminListaSesiones" class="admin-sesiones-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    
+    <div class="scan-overlay" id="scanOverlay" aria-hidden="true">
+        <div class="scan-panel">
+            <div class="scan-panel-header">
+                <h2 id="scanTitle"><span class="ico-scan" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M2 7h1.5v10H2V7zm2.5 0H6v10H4.5V7zM7 7h1.2v10H7V7zm2.2 0h2v10h-2V7zm3 0h1.2v10H12.2V7z"/><path fill="currentColor" d="M15 7h3.5v3.5H15V7zm1 1v1.5h1.5V8H16zm2.5 4.5H22V15h-1.5v1.5H18v-1.5h-.5v-1.5H18v-1.5h-.5zM15 15h2v2h-2v-2z"/><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M3 5h3M3 5v3M21 5h-3M21 5v3M3 19h3M3 19v-3M21 19h-3M21 19v-3"/></svg></span> Escanear código</h2>
+                <button type="button" class="admin-close" id="scanCloseBtn" aria-label="Cerrar">✕</button>
+            </div>
+            <p class="scan-hint" id="scanHint">Apunta al código de barras o QR del producto.</p>
+            <div id="scanReader" class="scan-reader"></div>
+            <p class="scan-status" id="scanStatus"></p>
+            <button type="button" class="btn btn-outline" id="scanCancelBtn" style="width:100%;margin-top:0.5rem;">Cancelar</button>
+        </div>
+    </div>
+
+    <div class="confirm-overlay" id="confirmOverlay">
+        <div class="confirm-box">
+            <p id="confirmMensaje">¿Confirmar acción?</p>
+            <div class="confirm-actions">
+                <button type="button" class="btn btn-outline" id="confirmCancelar">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="confirmAceptar">Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+<!-- Calculadora rápida (admin): calcular y poner en cajas/unidades -->
+<button type="button" id="fabCalc" class="fab-calc" hidden title="Calculadora" aria-label="Abrir calculadora">🧮</button>
+<div class="calc-overlay" id="calcOverlay" hidden aria-hidden="true">
+  <div class="calc-panel" role="dialog" aria-label="Calculadora">
+    <div class="calc-head">
+      <span class="calc-title">Calculadora</span>
+      <button type="button" class="calc-close" id="calcCloseBtn" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="calc-history" id="calcHistory" aria-label="Historial de operaciones"></div>
+    <div class="calc-display" id="calcDisplay" aria-live="polite">0</div>
+    <div class="calc-expr" id="calcExpr"></div>
+    <div class="calc-pad">
+      <button type="button" class="calc-key" data-k="C">C</button>
+      <button type="button" class="calc-key" data-k="⌫">⌫</button>
+      <button type="button" class="calc-key calc-op" data-k="%">%</button>
+      <button type="button" class="calc-key calc-op" data-k="/">÷</button>
+      <button type="button" class="calc-key" data-k="7">7</button>
+      <button type="button" class="calc-key" data-k="8">8</button>
+      <button type="button" class="calc-key" data-k="9">9</button>
+      <button type="button" class="calc-key calc-op" data-k="*">×</button>
+      <button type="button" class="calc-key" data-k="4">4</button>
+      <button type="button" class="calc-key" data-k="5">5</button>
+      <button type="button" class="calc-key" data-k="6">6</button>
+      <button type="button" class="calc-key calc-op" data-k="-">−</button>
+      <button type="button" class="calc-key" data-k="1">1</button>
+      <button type="button" class="calc-key" data-k="2">2</button>
+      <button type="button" class="calc-key" data-k="3">3</button>
+      <button type="button" class="calc-key calc-op" data-k="+">+</button>
+      <button type="button" class="calc-key calc-zero" data-k="0">0</button>
+      <button type="button" class="calc-key" data-k=".">.</button>
+      <button type="button" class="calc-key calc-eq" data-k="=">=</button>
+    </div>
+    <div class="calc-actions">
+      <button type="button" class="btn btn-outline btn-sm" id="calcToCajas">→ Cajas</button>
+      <button type="button" class="btn btn-outline btn-sm" id="calcToUnidades">→ Unidades</button>
+      <button type="button" class="btn btn-primary btn-sm" id="calcToFocus">Poner</button>
     </div>
   </div>
+</div>
 
-  <div id="consWorkspace" class="cons-layout" hidden>
-    <aside class="cons-sidebar no-print">
-      <div class="cons-side-head">
-        <div class="side-brand">
-          <img src="logo-iem.png" alt="IEM" class="side-logo" onerror="this.onerror=null;this.src='8y7D7.png'" />
-          <div>
-            <div class="side-brand-name">IEM</div>
-            <h1 id="consSideTitle">Carga</h1>
-          </div>
-        </div>
-        <button type="button" class="btn btn-outline btn-sm" id="btnVolverChooser" style="width:100%">← Inicio</button>
-        <div class="cons-status" id="consStatus" hidden></div>
-      </div>
+<script src="config.js?v=1.4.4"></script>
+<script src="iem-core.js?v=1.4.4"></script>
+<script src="app.js?v=1.4.4"></script>
+<script>
+/* Registrar PWA (solo en HTTPS o localhost) */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('./sw.js?v=1.4.4', { scope: './' }).then(function (reg) {
+      console.log('[PWA] Service Worker OK v1.3.6', reg.scope);
+      try { reg.update(); } catch (e) {}
+      function skipWaiting(worker) {
+        if (!worker) return;
+        try { worker.postMessage({ type: 'SKIP_WAITING' }); } catch (e) {}
+      }
+      if (reg.waiting) skipWaiting(reg.waiting);
+      reg.addEventListener('updatefound', function () {
+        var nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', function () {
+          if (nw.state === 'installed') skipWaiting(nw);
+        });
+      });
+      var refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (refreshing) return;
+        try {
+          if (sessionStorage.getItem('iem_sw_reloaded')) return;
+          sessionStorage.setItem('iem_sw_reloaded', '1');
+          sessionStorage.setItem('iem_allow_unload', '1');
+        } catch (e) {}
+        refreshing = true;
+        window.location.reload();
+      });
+    }).catch(function (err) {
+      console.warn('[PWA] Service Worker no registrado', err);
+    });
+  });
+}
+</script>
 
-      <div class="cons-side-block">
-        <div class="cons-fecha-badge" style="width:100%;justify-content:center">
-          📅 <span id="consFechaLabel">—</span>
-        </div>
-        <input type="hidden" id="consFecha" />
-      </div>
+<button type="button" id="fabAlertaVenc" class="fab-alerta-venc" hidden title="Ir a listado por vencer" aria-label="Productos por vencer">
+  <span class="fab-alerta-ico">⚠</span>
+  <span class="fab-alerta-count" id="fabAlertaCount">0</span>
+</button>
 
-      <div class="cons-side-block panel-carga" id="panelSideCarga">
-        <div class="step-label"><span class="step-n">1</span> Subir Excel</div>
-        <label class="btn btn-primary" style="cursor:pointer;width:100%;text-align:center;box-sizing:border-box;padding:.65rem">
-          📂 Elegir archivo
-          <input type="file" id="consFile" accept=".xlsx,.xls,.xlsm,.csv" multiple hidden />
-        </label>
-        <label class="btn btn-outline btn-sm" style="cursor:pointer;width:100%;text-align:center;box-sizing:border-box;margin-top:.4rem">
-          Carpeta
-          <input type="file" id="consFolder" webkitdirectory directory multiple hidden />
-        </label>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsRefrescarCarpeta" style="width:100%;margin-top:.35rem" title="Actualizar">↻</button>
-        <p class="cons-status" id="consImportStatus" hidden></p>
-      </div>
-
-      <div class="cons-side-block panel-carga">
-        <div class="step-label"><span class="step-n">2</span> Camión</div>
-        <select id="consCamion" style="width:100%;padding:.55rem;font-size:.95rem">
-          <option value="">Todos</option>
-        </select>
-        <select id="consFiltroCamion" hidden>
-          <option value="">Todos los camiones</option>
-        </select>
-        <select id="consFiltroTipo" hidden>
-          <option value="">Todos</option>
-          <option value="FRIOS">Fríos</option>
-          <option value="SECOS">Secos</option>
-        </select>
-      </div>
-
-      <div class="cons-side-block panel-carga">
-        <div class="step-label"><span class="step-n">3</span> Descargar</div>
-        <button type="button" class="btn btn-primary" id="btnConsPrintUno" style="width:100%;padding:.65rem;font-weight:700">PDF camión</button>
-        <button type="button" class="btn btn-outline" id="btnConsPrintMulti" style="width:100%;margin-top:.4rem;padding:.55rem">PDF todos</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsTema" style="width:100%;margin-top:.5rem">🌓</button>
-      </div>
-
-      <div class="cons-side-block panel-ruta" id="panelSideRuta" hidden>
-        <div class="step-label"><span class="step-n">1</span> Liquidación</div>
-        <label class="btn btn-primary" style="cursor:pointer;width:100%;text-align:center;box-sizing:border-box;padding:.65rem">
-          📂 Subir Excel
-          <input type="file" id="rutaFile" accept=".xlsx,.xls,.xlsm,.csv" hidden />
-        </label>
-        <p class="cons-status" id="rutaImportStatus" hidden></p>
-
-        <div class="step-label" style="margin-top:.75rem"><span class="step-n">2</span> Camión</div>
-        <select id="rutaFiltro" style="width:100%;padding:.55rem;font-size:.95rem">
-          <option value="">Todos</option>
-        </select>
-
-        <div class="step-label" style="margin-top:.75rem"><span class="step-n">3</span> Mapa</div>
-        <button type="button" class="btn btn-outline" id="btnRutaMiUbicacion" style="width:100%;padding:.55rem">📍 Mi ubicación</button>
-        <p class="cons-status" id="rutaGeoYo" hidden></p>
-        <button type="button" class="btn btn-primary" id="btnRutaMaps" style="width:100%;margin-top:.4rem;padding:.65rem;font-weight:700">🗺️ Abrir ruta</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btnRutaPublicar" style="width:100%;margin-top:.4rem">Publicar</button>
-        <p class="cons-status" id="rutaStats" style="font-size:.75rem;margin-top:.5rem;text-align:center"></p>
-      </div>
-
-      <p class="cons-status" id="consResumen" hidden></p>
-      <p class="cons-status" id="consPdfStatus" hidden></p>
-    </aside>
-
-    <main class="cons-main">
-      <div id="panelMainCarga" style="flex:1;display:flex;flex-direction:column;min-height:0">
-        <iframe id="consPdfFrame" title="Vista previa PDF" class="cons-pdf-frame"></iframe>
-      </div>
-      <div id="panelMainRuta" hidden style="flex:1;display:flex;flex-direction:column;min-height:0;background:var(--c-bg)">
-        <div id="rutaMapWrap" class="ruta-map-wrap">
-          <div id="rutaMap" class="ruta-map-frame" role="img" aria-label="Mapa de paradas de reparto"></div>
-          <p id="rutaMapHint" class="ruta-map-hint">① Sube Excel  ·  ② Elige camión</p>
-          <div id="rutaMapLegend" class="ruta-map-legend" hidden></div>
-        </div>
-        <div id="rutaList" class="ruta-list" style="padding:0.75rem 1rem 1.5rem;overflow:auto;flex:1"></div>
-      </div>
-    </main>
-  </div>
-
-  <div id="consPreviewInner" class="cons-preview-inner" aria-hidden="true"></div>
-  <div class="cons-table-wrap" id="consTableWrap" hidden>
-    <table class="cons-table" id="consTabla">
-      <thead id="consThead"></thead>
-      <tbody id="consTbody"></tbody>
-    </table>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="consolidado.js"></script>
 </body>
 </html>
