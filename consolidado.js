@@ -569,127 +569,257 @@
   }
 
   /**
-   * Convierte las .print-page del host oculto en un PDF A4 real (html2canvas + jsPDF).
-   * La vista previa del iframe = el mismo archivo que se descarga.
+   * PDF vectorial con jsPDF + autoTable (texto nítido, no captura de imagen).
+   * @param {string|null} filename
+   * @param {boolean} autoDownload
+   * @param {Array|null} hojasParam
    */
-  async function generarPdfDesdeHojas(filename, autoDownload) {
-    var host = $('consPreviewInner');
+  async function generarPdfDesdeHojas(filename, autoDownload, hojasParam) {
     var frame = $('consPdfFrame');
-    if (!host) throw new Error('Falta contenedor de render');
-    var pages = host.querySelectorAll('.print-page');
-    if (!pages.length) throw new Error('No hay hojas para el PDF');
-    if (!window.html2canvas) throw new Error('html2canvas no cargó');
     var Jspdf = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
     if (!Jspdf) throw new Error('jsPDF no cargó');
 
-    /**
-     * A4 a 96 dpi (html2canvas trabaja en CSS px):
-     * 210mm = 210 / 25.4 * 96 ≈ 794 px
-     * 297mm = 297 / 25.4 * 96 ≈ 1123 px
-     * Márgenes SOLO dentro del HTML (no en jsPDF) → evita doble margen y escalados raros.
-     */
-    var PAGE_W = 794;
-    var PAGE_H = 1123;
-    var PAD = 36; // ~9.5 mm — margen a los cantos
+    var testDoc = new Jspdf({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    if (typeof testDoc.autoTable !== 'function') {
+      throw new Error('jsPDF-autoTable no cargó. Revisa internet/CDN.');
+    }
 
-    host.style.cssText = 'position:fixed;left:0;top:0;width:' + PAGE_W +
-      'px;background:#fff;z-index:-1;opacity:0.01;pointer-events:none;overflow:visible;';
-
-    var els = Array.prototype.slice.call(pages);
-    els.forEach(function (el) {
-      // Caja A4 fija + flex: pie siempre abajo
-      el.style.cssText = [
-        'width:' + PAGE_W + 'px',
-        'height:' + PAGE_H + 'px',
-        'min-height:' + PAGE_H + 'px',
-        'max-height:' + PAGE_H + 'px',
-        'overflow:hidden',
-        'box-sizing:border-box',
-        'padding:' + PAD + 'px',
-        'margin:0',
-        'background:#ffffff',
-        'color:#0f172a',
-        'font-family:Segoe UI,Arial,sans-serif',
-        'font-size:10px',
-        'line-height:1.15',
-        'display:flex',
-        'flex-direction:column'
-      ].join(';');
-      var body = el.querySelector('.print-body');
-      if (body) {
-        body.style.flex = '1 1 auto';
-        body.style.minHeight = '0';
-        body.style.overflow = 'hidden';
-      }
-      var foot = el.querySelector('.print-footer');
-      if (foot) {
-        foot.style.flex = '0 0 auto';
-        foot.style.marginTop = 'auto';
-      }
-      var head = el.querySelector('.print-header');
-      if (head) head.style.flex = '0 0 auto';
-      // Compactar tablas internas (más filas por hoja)
-      el.querySelectorAll('table').forEach(function (tb) {
-        tb.style.fontSize = '10px';
-        tb.style.borderCollapse = 'collapse';
-        tb.style.width = '100%';
-      });
-      el.querySelectorAll('th,td').forEach(function (c) {
-        c.style.padding = '2.5px 5px';
-      });
-      el.querySelectorAll('.print-header').forEach(function (h) {
-        h.style.marginBottom = '5px';
-        h.style.paddingBottom = '4px';
-      });
-      el.querySelectorAll('img').forEach(function (img) {
-        img.style.height = '42px';
-      });
-      el.querySelectorAll('.blk-tipo').forEach(function (b) {
-        b.style.margin = '4px 0 2px';
-        b.style.padding = '3px 7px';
-        b.style.fontSize = '9pt';
-      });
-    });
-
-    // Equilibrio impresión almacén: legible, no tan pesado ni lento.
-    // ~150–160 dpi efectivo (scale 1.6), JPEG 0.86, compresión MEDIUM.
-    var SCALE = 1.6;
-    var pdf = new Jspdf({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
-    for (var i = 0; i < els.length; i++) {
-      var el = els[i];
-      if (typeof status === 'function') {
-        try { status('PDF hoja ' + (i + 1) + ' / ' + els.length + '…'); } catch (eS) {}
-      }
-      var canvas = await html2canvas(el, {
-        scale: SCALE,
-        width: PAGE_W,
-        height: PAGE_H,
-        windowWidth: PAGE_W,
-        windowHeight: PAGE_H,
-        x: 0,
-        y: 0,
-        scrollX: 0,
-        scrollY: 0,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        imageTimeout: 2000,
-        removeContainer: true,
-        letterRendering: true
-      });
-      if (!canvas || !canvas.width) continue;
-      var img = canvas.toDataURL('image/jpeg', 0.86);
-      if (i > 0) pdf.addPage();
-      // MEDIUM: recomprime bien sin destruir el texto
-      pdf.addImage(img, 'JPEG', 5, 5, 200, 287, undefined, 'MEDIUM');
-      // Liberar canvas cuanto antes
+    var hojas = hojasParam;
+    if (!hojas || !hojas.length) {
+      var modo = 'multi';
       try {
-        var ctx = canvas.getContext('2d');
-        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-      } catch (eClr) {}
-      canvas.width = 0;
-      canvas.height = 0;
+        if (String(($('consCamion') || {}).value || '').trim()) modo = 'uno';
+      } catch (eM) {}
+      hojas = construirHojasVista(modo);
+    }
+    if (!hojas || !hojas.length) throw new Error('No hay hojas para el PDF');
+
+    var pdf = new Jspdf({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+    var pageW = 210;
+    var pageH = 297;
+    var marginX = 12;
+    var marginTop = 12;
+    var contentW = pageW - marginX * 2;
+    var firstPage = true;
+    var TITULO = 'CONSOLIDADO DE CARGA - MERCADERÍA - GENERAL (R)';
+
+    function drawHeader(doc, camion, fecha, numHoja, totalHojas) {
+      var y = marginTop;
+      try {
+        if (typeof LOGO_URL === 'string' && LOGO_URL) {
+          doc.addImage(LOGO_URL, 'PNG', marginX, y, 18, 12);
+        }
+      } catch (eL) {}
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(30, 58, 95);
+      doc.text(TITULO, marginX + 22, y + 5);
+      var badge = 'Hoja ' + numHoja + ' de ' + totalHojas;
+      doc.setFontSize(8);
+      var bw = doc.getTextWidth(badge) + 6;
+      doc.setFillColor(15, 23, 42);
+      doc.roundedRect(pageW - marginX - bw, y + 1, bw, 6, 1.5, 1.5, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.text(badge, pageW - marginX - bw + 3, y + 5);
+
+      var camTxt = String(camion || '');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      var camW = Math.max(doc.getTextWidth(camTxt) + 6, 20);
+      doc.setFillColor(29, 78, 216);
+      doc.roundedRect(marginX + 22, y + 7.5, camW, 5.5, 1.5, 1.5, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.text(camTxt, marginX + 25, y + 11.2);
+
+      doc.setTextColor(51, 65, 85);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.text('Fecha: ' + String(fecha || ''), marginX + 22 + camW + 4, y + 11.2);
+
+      doc.setDrawColor(29, 78, 216);
+      doc.setLineWidth(0.6);
+      doc.line(marginX, y + 15, pageW - marginX, y + 15);
+      return y + 18;
+    }
+
+    function drawFooter(doc, camion, numHoja, totalHojas) {
+      var y = pageH - 11;
+      doc.setDrawColor(29, 78, 216);
+      doc.setLineWidth(0.5);
+      doc.line(marginX, y - 3, pageW - marginX, y - 3);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(71, 85, 105);
+      doc.text('IEM Group · Consolidado de carga · ' + String(camion || ''), marginX, y);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Hoja ' + numHoja + ' de ' + totalHojas, pageW - marginX, y, { align: 'right' });
+    }
+
+    function drawTotal(doc, camion, peso, startY) {
+      var y = Math.min(Math.max(startY + 4, 40), pageH - 26);
+      doc.setFillColor(241, 245, 249);
+      doc.setDrawColor(29, 78, 216);
+      doc.setLineWidth(0.5);
+      doc.roundedRect(marginX, y, contentW, 10, 1.5, 1.5, 'FD');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text('TOTAL PESO ' + String(camion || ''), marginX + 4, y + 6.5);
+      doc.setFontSize(12);
+      doc.setTextColor(30, 58, 95);
+      doc.text(fmtPesoNum(peso) + ' kg', pageW - marginX - 4, y + 6.5, { align: 'right' });
+    }
+
+    function buildTableBody(rows, itemOffset) {
+      var body = [];
+      var lastTipo = '';
+      var lastCat = '';
+      var n = itemOffset;
+      (rows || []).forEach(function (r) {
+        if (r.tipoKey !== lastTipo) {
+          lastTipo = r.tipoKey;
+          lastCat = '';
+          var nom = lastTipo === 'FRIOS' ? 'FRÍOS' : 'SECOS';
+          var bg = lastTipo === 'FRIOS' ? [14, 116, 144] : [180, 83, 9];
+          body.push([{
+            content: nom,
+            colSpan: 7,
+            styles: {
+              fillColor: bg,
+              textColor: 255,
+              fontStyle: 'bold',
+              fontSize: 9,
+              halign: 'left',
+              cellPadding: 2.2
+            }
+          }]);
+        }
+        if (r.categoria !== lastCat) {
+          lastCat = r.categoria;
+          body.push([{
+            content: String(lastCat || 'OTROS'),
+            colSpan: 7,
+            styles: {
+              fillColor: [30, 58, 95],
+              textColor: 255,
+              fontStyle: 'bold',
+              fontSize: 8,
+              halign: 'left',
+              cellPadding: 1.8
+            }
+          }]);
+        }
+        n++;
+        var it = r.item || {};
+        var fac = Number(it.factor) > 1 ? Number(it.factor) : 1;
+        var cu = cantACajasUnd(it.cantidad, fac);
+        var cajasVal = (cu.cajas === '' || cu.cajas === 0 || cu.cajas === '0') ? '—' : String(cu.cajas);
+        body.push([
+          { content: String(n), styles: { halign: 'center' } },
+          { content: String(it.codigo || ''), styles: { halign: 'center', fontStyle: 'bold' } },
+          { content: String(it.descripcion || ''), styles: { halign: 'left' } },
+          { content: String(it.unidad_ref || ''), styles: { halign: 'center', fontSize: 7.5 } },
+          {
+            content: cajasVal,
+            styles: {
+              halign: 'center',
+              fontStyle: 'bold',
+              fontSize: 10,
+              fillColor: [254, 243, 199],
+              textColor: [146, 64, 14],
+              lineColor: [180, 83, 9],
+              lineWidth: 0.25
+            }
+          },
+          { content: String(cu.sueltas), styles: { halign: 'center', textColor: [71, 85, 105] } },
+          { content: fmtPeso(it.peso), styles: { halign: 'right' } }
+        ]);
+      });
+      return body;
+    }
+
+    var head = [[
+      { content: 'ITEM', styles: { halign: 'center' } },
+      { content: 'Código', styles: { halign: 'center' } },
+      { content: 'Producto / Descripción', styles: { halign: 'left' } },
+      { content: 'Unidad', styles: { halign: 'center' } },
+      { content: 'CAJAS', styles: { halign: 'center', fillColor: [251, 191, 36], textColor: [120, 53, 15], fontStyle: 'bold' } },
+      { content: 'Und. sueltas', styles: { halign: 'center', fontSize: 7 } },
+      { content: 'Peso', styles: { halign: 'center' } }
+    ]];
+
+    for (var hi = 0; hi < hojas.length; hi++) {
+      var h = hojas[hi];
+      var parts = partirItemsEnPaginas(h.items || []);
+      if (!parts.length) parts = [{ rows: [], pesoTotalCamion: 0, esUltima: true }];
+      var totalCam = parts.length;
+      var offset = 0;
+      for (var pi = 0; pi < parts.length; pi++) {
+        var part = parts[pi];
+        if (!firstPage) pdf.addPage();
+        firstPage = false;
+
+        var startY = drawHeader(pdf, h.camion, h.fecha, pi + 1, totalCam);
+        var body = buildTableBody(part.rows, offset);
+
+        if (!body.length) {
+          pdf.setFontSize(10);
+          pdf.setTextColor(100, 116, 139);
+          pdf.text('Sin ítems en esta hoja.', marginX, startY + 10);
+        } else {
+          pdf.autoTable({
+            startY: startY,
+            margin: { left: marginX, right: marginX, bottom: 16 },
+            head: head,
+            body: body,
+            theme: 'grid',
+            tableWidth: contentW,
+            styles: {
+              font: 'helvetica',
+              fontSize: 8,
+              cellPadding: 1.35,
+              lineColor: [148, 163, 184],
+              lineWidth: 0.15,
+              textColor: [15, 23, 42],
+              overflow: 'linebreak',
+              valign: 'middle'
+            },
+            headStyles: {
+              fillColor: [226, 232, 240],
+              textColor: [15, 23, 42],
+              fontStyle: 'bold',
+              fontSize: 8,
+              cellPadding: 1.5
+            },
+            columnStyles: {
+              0: { cellWidth: 12 },
+              1: { cellWidth: 16 },
+              2: { cellWidth: 'auto' },
+              3: { cellWidth: 20 },
+              4: { cellWidth: 16 },
+              5: { cellWidth: 20 },
+              6: { cellWidth: 16 }
+            },
+            showHead: 'everyPage'
+          });
+        }
+
+        var finalY = (pdf.lastAutoTable && pdf.lastAutoTable.finalY) || (startY + 20);
+        if (part.esUltima) {
+          drawTotal(pdf, h.camion, part.pesoTotalCamion, finalY);
+        } else {
+          pdf.setFontSize(8);
+          pdf.setTextColor(100, 116, 139);
+          pdf.text(
+            '… continúa en hoja ' + (pi + 2) + ' de ' + totalCam + ' · ' + String(h.camion || ''),
+            pageW - marginX,
+            Math.min(finalY + 6, pageH - 16),
+            { align: 'right' }
+          );
+        }
+        drawFooter(pdf, h.camion, pi + 1, totalCam);
+        offset += (part.rows && part.rows.length) || 0;
+      }
     }
 
     revokePdfUrl();
@@ -699,6 +829,7 @@
     if (autoDownload) {
       pdf.save(filename || 'consolidado_carga.pdf');
     }
+    setPdfStatus('PDF listo' + (autoDownload ? ' (descarga)' : ''));
     return pdf;
   }
 
@@ -774,7 +905,12 @@
         return;
       }
       _pdfBusy = true;
-      generarPdfDesdeHojas(null, false).catch(function (e) {
+      var hojasPrev = null;
+      try {
+        var modoP = String(($('consCamion') || {}).value || '').trim() ? 'uno' : 'multi';
+        hojasPrev = construirHojasVista(modoP);
+      } catch (eH) {}
+      generarPdfDesdeHojas(null, false, hojasPrev).catch(function (e) {
         console.error(e);
         setPdfStatus('No se pudo generar PDF: ' + ((e && e.message) || e) + ' — revisa CDN/internet');
       }).then(function () {
@@ -1290,11 +1426,13 @@
         return;
       }
     }
+    var hojas;
     try {
-      // HTML en host oculto
-      var hojas = construirHojasVista(modoPanel);
+      hojas = construirHojasVista(modoPanel);
       var host = $('consPreviewInner');
-      if (host) host.innerHTML = htmlDocumento(hojas);
+      if (host) {
+        try { host.innerHTML = htmlDocumento(hojas); } catch (eH) { host.innerHTML = ''; }
+      }
     } catch (e) {
       console.error(e);
       alert('No se pudo armar el documento: ' + ((e && e.message) || e));
@@ -1303,8 +1441,8 @@
     var fecha = ($('consFecha') || {}).value || new Date().toISOString().slice(0, 10);
     var cam = String(($('consCamion') || {}).value || '').trim() || 'todos';
     var fname = 'consolidado_' + String(cam).replace(/\s+/g, '_') + '_' + fecha + '.pdf';
-    setPdfStatus('Generando PDF para descargar…');
-    generarPdfDesdeHojas(fname, true).catch(function (e) {
+    setPdfStatus('Generando PDF…');
+    generarPdfDesdeHojas(fname, true, hojas).catch(function (e) {
       console.error(e);
       alert('Error PDF: ' + ((e && e.message) || e));
     });
