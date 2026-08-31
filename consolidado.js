@@ -651,12 +651,15 @@
       });
     });
 
-    // Escala 2 ≈ texto nítido al imprimir (antes 1.1 se veía borroso como foto).
-    // JPEG 0.92 + compresión NORMAL mantiene calidad sin inflar tanto el archivo.
-    var SCALE = 2;
+    // Equilibrio impresión almacén: legible, no tan pesado ni lento.
+    // ~150–160 dpi efectivo (scale 1.6), JPEG 0.86, compresión MEDIUM.
+    var SCALE = 1.6;
     var pdf = new Jspdf({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
     for (var i = 0; i < els.length; i++) {
       var el = els[i];
+      if (typeof status === 'function') {
+        try { status('PDF hoja ' + (i + 1) + ' / ' + els.length + '…'); } catch (eS) {}
+      }
       var canvas = await html2canvas(el, {
         scale: SCALE,
         width: PAGE_W,
@@ -671,14 +674,15 @@
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
-        imageTimeout: 2500,
+        imageTimeout: 2000,
         removeContainer: true,
         letterRendering: true
       });
       if (!canvas || !canvas.width) continue;
-      var img = canvas.toDataURL('image/jpeg', 0.92);
+      var img = canvas.toDataURL('image/jpeg', 0.86);
       if (i > 0) pdf.addPage();
-      pdf.addImage(img, 'JPEG', 5, 5, 200, 287, undefined, 'NONE');
+      // MEDIUM: recomprime bien sin destruir el texto
+      pdf.addImage(img, 'JPEG', 5, 5, 200, 287, undefined, 'MEDIUM');
       // Liberar canvas cuanto antes
       try {
         var ctx = canvas.getContext('2d');
