@@ -1151,7 +1151,7 @@
       '-webkit-print-color-adjust:exact;print-color-adjust:exact;">' +
       '<div class="print-header" style="flex:0 0 auto;display:flex;align-items:center;gap:14px;border-bottom:3px solid #1d4ed8;' +
       'padding-bottom:8px;margin-bottom:8px;">' +
-        '<img src="' + LOGO_URL + '" alt="IEM" style="height:40px;width:auto;object-fit:contain;" onerror="this.style.display='none'" />' +
+        '<img src="' + LOGO_URL + '" alt="IEM" style="height:40px;width:auto;object-fit:contain;" onerror=\"this.remove()\" />' +
         '<div style="flex:1;">' +
           '<div style="font-size:11.5pt;font-weight:800;color:#1e3a5f;">' + esc(tituloFijo) + badgeHoja + '</div>' +
           '<div style="margin-top:6px;font-size:10pt;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">' +

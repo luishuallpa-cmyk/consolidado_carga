@@ -302,6 +302,8 @@
     .chooser-brand h1 { margin: 0.15rem 0 0.85rem; font-size: 1.4rem; letter-spacing: 0.02em; }
     
     .chooser-opt {
+      position: relative;
+      z-index: 2;
       min-height: 168px;
       padding: 1.1rem 0.9rem 1rem;
       gap: 0.45rem;
@@ -447,7 +449,51 @@
       min-height: 100vh; min-height: 100dvh;
       display: flex; align-items: center; justify-content: center;
       padding: 1.25rem;
-      background: var(--c-bg);
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% -10%, rgba(59,110,165,.28), transparent 55%),
+        radial-gradient(ellipse 50% 40% at 100% 100%, rgba(239,68,68,.12), transparent 50%),
+        radial-gradient(ellipse 40% 30% at 0% 80%, rgba(34,197,94,.1), transparent 45%),
+        var(--c-bg);
+    }
+    .cons-chooser::before {
+      content: "";
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(148,163,184,.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148,163,184,.07) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 20%, transparent 75%);
+      pointer-events: none;
+    }
+    .cons-chooser::after {
+      content: "";
+      position: absolute; inset: 0;
+      background: repeating-linear-gradient(
+        -18deg,
+        transparent,
+        transparent 40px,
+        rgba(59,110,165,.04) 40px,
+        rgba(59,110,165,.04) 41px
+      );
+      pointer-events: none;
+    }
+    .cons-chooser .chooser-card {
+      position: relative;
+      z-index: 1;
+      backdrop-filter: blur(8px);
+    }
+    body.light-theme .cons-chooser {
+      background:
+        radial-gradient(ellipse 80% 60% at 50% -10%, rgba(59,110,165,.18), transparent 55%),
+        radial-gradient(ellipse 50% 40% at 100% 100%, rgba(239,68,68,.08), transparent 50%),
+        #f1f5f9;
+    }
+    body.light-theme .cons-chooser::before {
+      background-image:
+        linear-gradient(rgba(100,116,139,.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(100,116,139,.1) 1px, transparent 1px);
     }
     .chooser-card {
       width: min(640px, 100%);
