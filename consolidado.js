@@ -1504,6 +1504,7 @@
 
   function mapsLink(lat, lng) {
     if (lat == null || lng == null) return '';
+    // destination only = el usuario elige cómo llegar; con origin = navegación directa
     var url = 'https://www.google.com/maps/dir/?api=1&destination=' +
       encodeURIComponent(Number(lat) + ',' + Number(lng)) + '&travelmode=driving';
     if (miUbicacion) {
@@ -1512,30 +1513,265 @@
     return url;
   }
 
+  /** Distancia aproximada en km (Haversine rápida). */
+  function distKm(aLat, aLng, bLat, bLng) {
+    var R = 6371;
+    var dLat = (bLat - aLat) * Math.PI / 180;
+    var dLng = (bLng - aLng) * Math.PI / 180;
+    var la1 = aLat * Math.PI / 180;
+    var la2 = bLat * Math.PI / 180;
+    var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+
   /**
-   * Ruta tipo Google Maps: origen = mi ubicación (si hay),
-   * paradas = waypoints, último = destination.
-   * Google limita waypoints; partimos en tramos de 8.
+   * Orden nearest-neighbor desde origen (mi ubicación o primer punto).
+   * Mejora el orden de visita respecto al Excel.
    */
-  function mapsLinkMulti(puntos) {
+  function ordenarPorCercania(puntos) {
     var con = (puntos || []).filter(function (p) {
       return p.lat != null && p.lng != null && isFinite(Number(p.lat)) && isFinite(Number(p.lng));
+    }).map(function (p) {
+      return {
+        lat: Number(p.lat),
+        lng: Number(p.lng),
+        nombre: p.nombre || p.cliente || '',
+        cliente: p.cliente || '',
+        direccion: p.direccion || '',
+        camion: p.camion || '',
+        placa: p.placa || '',
+        raw: p
+      };
     });
-    if (!con.length) return '';
-    if (con.length === 1) return mapsLink(con[0].lat, con[0].lng);
-    var dest = con[con.length - 1];
-    var mids = con.slice(0, -1);
-    // máx ~8 waypoints en URL móvil
-    if (mids.length > 8) mids = mids.slice(0, 8);
-    var wps = mids.map(function (p) { return Number(p.lat) + ',' + Number(p.lng); }).join('|');
+    if (con.length <= 1) return con;
+    var startLat = miUbicacion ? miUbicacion.lat : con[0].lat;
+    var startLng = miUbicacion ? miUbicacion.lng : con[0].lng;
+    var left = con.slice();
+    var ordered = [];
+    var curLat = startLat;
+    var curLng = startLng;
+    while (left.length) {
+      var bestI = 0;
+      var bestD = Infinity;
+      for (var i = 0; i < left.length; i++) {
+        var d = distKm(curLat, curLng, left[i].lat, left[i].lng);
+        if (d < bestD) { bestD = d; bestI = i; }
+      }
+      var next = left.splice(bestI, 1)[0];
+      ordered.push(next);
+      curLat = next.lat;
+      curLng = next.lng;
+    }
+    return ordered;
+  }
+
+  /**
+   * Google Maps URL (modo direcciones) soporta ~1 origen + ~9 waypoints + destino.
+   * Con más paradas hay que partir en tramos.
+   * MAX_WP = waypoints intermedios (sin contar destino).
+   */
+  var MAPS_MAX_WAYPOINTS = 8;
+
+  function mapsUrlTramo(pts, usarOrigen) {
+    if (!pts || !pts.length) return '';
+    if (pts.length === 1) {
+      var u = 'https://www.google.com/maps/dir/?api=1&destination=' +
+        encodeURIComponent(pts[0].lat + ',' + pts[0].lng) + '&travelmode=driving';
+      if (usarOrigen && miUbicacion) {
+        u += '&origin=' + encodeURIComponent(miUbicacion.lat + ',' + miUbicacion.lng);
+      }
+      return u;
+    }
+    var dest = pts[pts.length - 1];
+    var mids = pts.slice(0, -1);
+    var wps = mids.map(function (p) { return p.lat + ',' + p.lng; }).join('|');
     var url = 'https://www.google.com/maps/dir/?api=1&destination=' +
-      encodeURIComponent(Number(dest.lat) + ',' + Number(dest.lng)) +
+      encodeURIComponent(dest.lat + ',' + dest.lng) +
       (wps ? ('&waypoints=' + encodeURIComponent(wps)) : '') +
       '&travelmode=driving';
-    if (miUbicacion) {
+    if (usarOrigen && miUbicacion) {
       url += '&origin=' + encodeURIComponent(miUbicacion.lat + ',' + miUbicacion.lng);
     }
     return url;
+  }
+
+  /** Devuelve [{ label, url, count, pts }] tramos listos para abrir en Maps. */
+  function mapsTramos(puntos) {
+    var ordered = ordenarPorCercania(puntos);
+    if (!ordered.length) return [];
+    // tamaño de tramo = waypoints + destino ≈ 9 puntos
+    var size = MAPS_MAX_WAYPOINTS + 1;
+    var tramos = [];
+    for (var i = 0; i < ordered.length; i += size) {
+      var chunk = ordered.slice(i, i + size);
+      // Continuidad: el destino del tramo anterior puede ser origen visual del siguiente
+      // (Google no permite fijar origen arbitrario sin ser "mi ubicación", solo 1er tramo usa GPS)
+      tramos.push({
+        label: 'Tramo ' + (tramos.length + 1),
+        url: mapsUrlTramo(chunk, tramos.length === 0),
+        count: chunk.length,
+        pts: chunk
+      });
+    }
+    // renumerar labels con total
+    tramos.forEach(function (t, idx) {
+      t.label = 'Tramo ' + (idx + 1) + ' de ' + tramos.length + ' (' + t.count + ' paradas)';
+    });
+    return tramos;
+  }
+
+  /** Compat: un solo link (primer tramo). Preferir mapsTramos + UI. */
+  function mapsLinkMulti(puntos) {
+    var t = mapsTramos(puntos);
+    return t.length ? t[0].url : '';
+  }
+
+  /** KML con todos los pines — se importa en Google My Maps / Earth y se ven TODOS. */
+  function generarKml(puntos, nombre) {
+    var ordered = ordenarPorCercania(puntos);
+    var nombreDoc = nombre || 'Ruta reparto';
+    var placemarks = ordered.map(function (p, i) {
+      var nom = (i + 1) + '. ' + (p.nombre || p.cliente || 'Parada');
+      var desc = (p.direccion || '') + (p.cliente ? ('\\nCódigo: ' + p.cliente) : '');
+      return '<Placemark>' +
+        '<name>' + escXml(nom) + '</name>' +
+        '<description>' + escXml(desc) + '</description>' +
+        '<Point><coordinates>' + p.lng + ',' + p.lat + ',0</coordinates></Point>' +
+        '</Placemark>';
+    }).join('');
+    return '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<kml xmlns="http://www.opengis.net/kml/2.2">' +
+      '<Document><name>' + escXml(nombreDoc) + '</name>' + placemarks + '</Document></kml>';
+  }
+
+  function escXml(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function descargarKml(puntos, filename) {
+    var kml = generarKml(puntos, filename || 'ruta');
+    var blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (filename || 'ruta_reparto') + '.kml';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 500);
+  }
+
+  function generarGpx(puntos, nombre) {
+    var ordered = ordenarPorCercania(puntos);
+    var nombreDoc = nombre || 'Ruta reparto';
+    var wpts = ordered.map(function (p, i) {
+      return '<wpt lat="' + p.lat + '" lon="' + p.lng + '">' +
+        '<name>' + escXml((i + 1) + '. ' + (p.nombre || p.cliente || 'Parada')) + '</name>' +
+        '<desc>' + escXml(p.direccion || '') + '</desc></wpt>';
+    }).join('');
+    var trkpts = ordered.map(function (p) {
+      return '<trkpt lat="' + p.lat + '" lon="' + p.lng + '"></trkpt>';
+    }).join('');
+    return '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<gpx version="1.1" creator="IEM Consolidado" xmlns="http://www.topografix.com/GPX/1/1">' +
+      '<metadata><name>' + escXml(nombreDoc) + '</name></metadata>' +
+      wpts +
+      '<trk><name>' + escXml(nombreDoc) + '</name><trkseg>' + trkpts + '</trkseg></trk></gpx>';
+  }
+
+  function descargarGpx(puntos, filename) {
+    var gpx = generarGpx(puntos, filename || 'ruta');
+    var blob = new Blob([gpx], { type: 'application/gpx+xml' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (filename || 'ruta_reparto') + '.gpx';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 500);
+  }
+
+  /**
+   * Abre panel de tramos + opciones: ir a una parada, tramo en Maps, o KML (todos los pines).
+   */
+  function abrirPanelMaps(puntos, titulo) {
+    var con = (puntos || []).filter(function (p) {
+      return p.lat != null && p.lng != null && isFinite(Number(p.lat)) && isFinite(Number(p.lng));
+    });
+    if (!con.length) {
+      alert('No hay paradas con GPS para este transporte.');
+      return;
+    }
+    var tramos = mapsTramos(con);
+    var ordered = ordenarPorCercania(con);
+
+    var overlay = document.getElementById('rutaMapsOverlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'rutaMapsOverlay';
+      overlay.innerHTML =
+        '<div class="ruta-maps-modal" role="dialog" aria-modal="true">' +
+        '<div class="ruta-maps-head">' +
+        '<strong id="rutaMapsTitulo">Google Maps</strong>' +
+        '<button type="button" class="btn btn-outline btn-sm" id="rutaMapsCerrar">Cerrar</button>' +
+        '</div>' +
+        '<p class="ruta-maps-hint" id="rutaMapsHint"></p>' +
+        '<div class="ruta-maps-actions" id="rutaMapsActions"></div>' +
+        '<div class="ruta-maps-list" id="rutaMapsList"></div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', function (ev) {
+        if (ev.target === overlay) overlay.classList.remove('open');
+      });
+      document.getElementById('rutaMapsCerrar').addEventListener('click', function () {
+        overlay.classList.remove('open');
+      });
+    }
+
+    document.getElementById('rutaMapsTitulo').textContent = titulo || 'Ruta en Google Maps';
+    document.getElementById('rutaMapsHint').textContent =
+      con.length + ' paradas con GPS. Google Maps solo permite ~10 por ruta: ' +
+      'elige un tramo, una parada suelta, o descarga KML para ver TODOS los pines en My Maps.';
+
+    var actions = document.getElementById('rutaMapsActions');
+    var htmlAct = '';
+    tramos.forEach(function (t, idx) {
+      htmlAct += '<a class="btn btn-primary btn-sm" href="' + t.url +
+        '" target="_blank" rel="noopener">' + esc(t.label) + '</a>';
+    });
+        htmlAct += '<button type="button" class="btn btn-outline btn-sm" id="rutaMapsKml">📥 KML (My Maps)</button>';
+    htmlAct += '<button type="button" class="btn btn-outline btn-sm" id="rutaMapsGpx">📥 GPX (OsmAnd / Organic)</button>';
+    actions.innerHTML = htmlAct;
+    var fnameSafe = (titulo || 'ruta').replace(/\s+/g, '_');
+    var btnKml = document.getElementById('rutaMapsKml');
+    if (btnKml) {
+      btnKml.onclick = function () { descargarKml(con, fnameSafe); };
+    }
+    var btnGpx = document.getElementById('rutaMapsGpx');
+    if (btnGpx) {
+      btnGpx.onclick = function () { descargarGpx(con, fnameSafe); };
+    }
+
+
+    var list = document.getElementById('rutaMapsList');
+    list.innerHTML = ordered.map(function (p, i) {
+      var href = mapsLink(p.lat, p.lng);
+      return '<a class="ruta-maps-item" href="' + href + '" target="_blank" rel="noopener">' +
+        '<span class="n">' + (i + 1) + '</span>' +
+        '<span class="txt"><b>' + esc(p.nombre || p.cliente) + '</b>' +
+        '<small>' + esc(p.direccion || '') + '</small></span>' +
+        '<span class="go">Ir →</span></a>';
+    }).join('');
+
+    overlay.classList.add('open');
   }
 
   function capturarMiUbicacion() {
@@ -1811,10 +2047,14 @@
         '<div class="meta">' + arr.length + ' paradas' +
         (miUbicacion ? ' · desde tu ubicación' : '') + '</div></div>' +
         (linkAll
-          ? '<a class="btn btn-primary btn-sm maps-link" href="' + linkAll + '" target="_blank" rel="noopener">Maps este transporte</a>'
+          ? '<button type="button" class="btn btn-primary btn-sm maps-link" data-maps-camion="' + esc(g) + '">Maps / elegir parada</button>'
           : '<span class="geo-miss">Sin GPS</span>') +
         '</div>';
-      arr.forEach(function (p, idx) {
+      var arrOrden = ordenarPorCercania(arr);
+      // Si no hay GPS, conservar orden original
+      if (!arrOrden.length) arrOrden = arr.map(function (p) { return { raw: p, lat: p.lat, lng: p.lng, nombre: p.nombre, cliente: p.cliente, direccion: p.direccion }; });
+      arrOrden.forEach(function (po, idx) {
+        var p = po.raw || po;
         var geoCls = (p.lat != null) ? 'geo-ok' : 'geo-miss';
         var geoTxt = (p.lat != null)
           ? ('📍 ' + Number(p.lat).toFixed(5) + ', ' + Number(p.lng).toFixed(5))
@@ -1832,6 +2072,15 @@
       });
     });
     box.innerHTML = html;
+    box.querySelectorAll('[data-maps-camion]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var cam = btn.getAttribute('data-maps-camion');
+        var pts = (grupos[cam] || []).filter(function (p) {
+          return p.lat != null && p.lng != null;
+        });
+        abrirPanelMaps(pts, cam);
+      });
+    });
     try { actualizarMapaRuta(); } catch (eM) {}
   }
 
@@ -2018,10 +2267,14 @@
     return CAMION_COLOR_FALLBACK[Math.abs(h) % CAMION_COLOR_FALLBACK.length];
   }
 
-  function markerIcon(color) {
+  function markerIcon(color, num) {
+    var n = (num != null && num !== '') ? String(num) : '';
+    var label = n
+      ? ('<text x="14" y="18" text-anchor="middle" font-size="11" font-weight="700" font-family="system-ui,Arial,sans-serif" fill="#0f172a">' + n + '</text>')
+      : '<circle cx="14" cy="14" r="5.5" fill="#fff"/>';
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40">' +
       '<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="' + color + '" stroke="#fff" stroke-width="1.5"/>' +
-      '<circle cx="14" cy="14" r="5.5" fill="#fff"/></svg>';
+      '<circle cx="14" cy="14" r="8" fill="#fff"/>' + label + '</svg>';
     return L.divIcon({
       className: 'ruta-pin',
       html: svg,
@@ -2029,6 +2282,52 @@
       iconAnchor: [14, 40],
       popupAnchor: [0, -36]
     });
+  }
+
+  var _rutaPolyline = null;
+  var _rutaOsrmLine = null;
+  var _rutaOsrmToken = 0;
+
+  function dibujarRutaEnMapa(ordered) {
+    if (!_rutaLeafletMap || !_rutaLeafletLayer) return;
+    if (_rutaPolyline) {
+      try { _rutaLeafletLayer.removeLayer(_rutaPolyline); } catch (e) {}
+      _rutaPolyline = null;
+    }
+    if (_rutaOsrmLine) {
+      try { _rutaLeafletLayer.removeLayer(_rutaOsrmLine); } catch (e) {}
+      _rutaOsrmLine = null;
+    }
+    if (!ordered || ordered.length < 2) return;
+
+    var latlngs = ordered.map(function (p) { return [p.lat, p.lng]; });
+    _rutaPolyline = L.polyline(latlngs, {
+      color: '#38bdf8',
+      weight: 3,
+      opacity: 0.55,
+      dashArray: '6 8'
+    }).addTo(_rutaLeafletLayer);
+
+    if (ordered.length > 60) return;
+    var token = ++_rutaOsrmToken;
+    var coords = ordered.map(function (p) { return p.lng + ',' + p.lat; }).join(';');
+    var url = 'https://router.project-osrm.org/route/v1/driving/' + coords +
+      '?overview=full&geometries=geojson&steps=false';
+    fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+      if (token !== _rutaOsrmToken) return;
+      if (!data || data.code !== 'Ok' || !data.routes || !data.routes[0]) return;
+      var geom = data.routes[0].geometry;
+      if (!geom || !geom.coordinates) return;
+      var path = geom.coordinates.map(function (c) { return [c[1], c[0]]; });
+      if (_rutaOsrmLine) {
+        try { _rutaLeafletLayer.removeLayer(_rutaOsrmLine); } catch (e2) {}
+      }
+      _rutaOsrmLine = L.polyline(path, {
+        color: '#2563eb',
+        weight: 5,
+        opacity: 0.75
+      }).addTo(_rutaLeafletLayer);
+    }).catch(function () {});
   }
 
   function actualizarMapaRuta() {
@@ -2074,10 +2373,10 @@
     });
 
     if (!pts.length) {
-      if (_rutaLeafletMap) {
-        if (_rutaLeafletLayer) {
-          _rutaLeafletLayer.clearLayers();
-        }
+      if (_rutaLeafletMap && _rutaLeafletLayer) {
+        _rutaLeafletLayer.clearLayers();
+        _rutaPolyline = null;
+        _rutaOsrmLine = null;
       }
       if (wrap) wrap.classList.remove('has-map');
       if (hint) {
@@ -2093,7 +2392,6 @@
     if (wrap) wrap.classList.add('has-map');
     if (hint) hint.style.display = 'none';
 
-    // init map once
     if (!_rutaLeafletMap) {
       _rutaLeafletMap = L.map(el, {
         zoomControl: true,
@@ -2104,23 +2402,30 @@
         attribution: '&copy; OpenStreetMap'
       }).addTo(_rutaLeafletMap);
       _rutaLeafletLayer = L.layerGroup().addTo(_rutaLeafletMap);
-      // fix size after panel shown
       setTimeout(function () { try { _rutaLeafletMap.invalidateSize(); } catch (e) {} }, 120);
     } else {
       setTimeout(function () { try { _rutaLeafletMap.invalidateSize(); } catch (e) {} }, 60);
     }
 
     _rutaLeafletLayer.clearLayers();
+    _rutaPolyline = null;
+    _rutaOsrmLine = null;
     _rutaLeafletMarkers = [];
 
+    var soloUnCamion = Object.keys(countsByTruck).length === 1;
+    var ordered = soloUnCamion ? ordenarPorCercania(pts) : pts.slice();
+    var numerar = soloUnCamion;
+
     var bounds = [];
-    pts.forEach(function (p) {
+    ordered.forEach(function (p, idx) {
       var color = colorCamion(p.camion);
+      var num = numerar ? (idx + 1) : '';
       var saldoTxt = (p.saldo != null && isFinite(Number(p.saldo)))
         ? ('S/ ' + Number(p.saldo).toFixed(2))
         : '—';
       var popup =
         '<div style="min-width:180px;max-width:260px;font-family:system-ui,sans-serif">' +
+        (num ? ('<span style="background:#0f172a;color:#fff;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;">#' + num + '</span> ') : '') +
         '<b>' + esc(p.nom) + '</b><br>' +
         '<span style="color:#64748b">Código: ' + esc(p.cliente) + '</span><br>' +
         '<hr style="margin:6px 0;border:none;border-top:1px solid #e2e8f0">' +
@@ -2130,11 +2435,12 @@
         '<b>Saldo:</b> ' + saldoTxt + '<br>' +
         (p.numCp ? '<b>Doc:</b> ' + esc(p.numCp) + '<br>' : '') +
         '<b>Dirección:</b><br><small>' + esc(p.direccion || '—') + '</small><br>' +
-        '<small style="color:#94a3b8">' + p.lat.toFixed(6) + ', ' + p.lng.toFixed(6) + '</small>' +
+        '<small style="color:#94a3b8">' + p.lat.toFixed(6) + ', ' + p.lng.toFixed(6) + '</small><br>' +
+        '<a href="' + mapsLink(p.lat, p.lng) + '" target="_blank" rel="noopener" style="color:#2563eb;font-weight:600;">Navegar aquí (Maps)</a>' +
         '</div>';
-      var m = L.marker([p.lat, p.lng], { icon: markerIcon(color) })
+      var m = L.marker([p.lat, p.lng], { icon: markerIcon(color, num) })
         .bindPopup(popup)
-        .bindTooltip(p.camion + ': ' + (p.nom || p.cliente).slice(0, 36), {
+        .bindTooltip((num ? ('#' + num + ' ') : '') + (p.nom || p.cliente).slice(0, 36), {
           direction: 'top',
           offset: [0, -30],
           opacity: 0.9
@@ -2143,6 +2449,17 @@
       _rutaLeafletMarkers.push(m);
       bounds.push([p.lat, p.lng]);
     });
+
+    if (numerar && ordered.length >= 2) {
+      dibujarRutaEnMapa(ordered);
+    }
+
+    if (miUbicacion && isFinite(miUbicacion.lat)) {
+      L.circleMarker([miUbicacion.lat, miUbicacion.lng], {
+        radius: 8, color: '#16a34a', fillColor: '#4ade80', fillOpacity: 0.9, weight: 2
+      }).bindTooltip('Tu ubicación').addTo(_rutaLeafletLayer);
+      bounds.push([miUbicacion.lat, miUbicacion.lng]);
+    }
 
     try {
       if (bounds.length === 1) {
@@ -2154,10 +2471,10 @@
       console.warn('[IEM] fitBounds', eFit);
     }
 
-    // leyenda por camión
     if (legend) {
       var keys = Object.keys(countsByTruck).sort();
       var htmlLeg = '<b>Camiones · ' + pts.length + ' pts</b>';
+      if (numerar) htmlLeg += '<div style="opacity:.85;margin-top:2px">Ruta ordenada + guía</div>';
       keys.forEach(function (k) {
         htmlLeg += '<div class="leg-row"><span class="leg-dot" style="background:' +
           colorCamion(k) + '"></span>' + esc(k) + ' (' + countsByTruck[k] + ')</div>';
@@ -2166,7 +2483,6 @@
       legend.hidden = false;
     }
   }
-
 
   function mostrarChooser() {
     console.log('[IEM] mostrarChooser()');
@@ -2286,15 +2602,19 @@
     }
     if ($('btnRutaMaps')) $('btnRutaMaps').addEventListener('click', function () {
       var go = function () {
-        var link = mapsLinkMulti(paradasFiltradas());
-        if (!link) {
-          var n = paradasFiltradas().length;
+        var list = paradasFiltradas();
+        var con = list.filter(function (p) {
+          return p.lat != null && p.lng != null && isFinite(Number(p.lat));
+        });
+        if (!con.length) {
+          var n = list.length;
           alert(n
             ? ('Hay ' + n + ' paradas pero ninguna con GPS.\nImporta clientes con lat/long en Inventario o revisa códigos.')
             : 'No hay paradas. Sube el Excel de liquidación y espera a que termine de importar.');
           return;
         }
-        window.open(link, '_blank', 'noopener');
+        var filtro = String(($('rutaFiltro') || {}).value || '') || 'Transporte';
+        abrirPanelMaps(con, filtro === '' ? 'Todos los transportes' : filtro);
       };
       if (!miUbicacion) {
         capturarMiUbicacion().then(go);

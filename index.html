@@ -292,6 +292,66 @@
       background: var(--c-card);
     }
     .ruta-map-wrap.has-map .ruta-map-hint { display: none; }
+
+    /* Panel Google Maps: tramos + elegir parada */
+    #rutaMapsOverlay {
+      display: none; position: fixed; inset: 0; z-index: 9999;
+      background: rgba(15,23,42,.65); align-items: flex-end; justify-content: center;
+      padding: 0;
+    }
+    #rutaMapsOverlay.open { display: flex; }
+    .ruta-maps-modal {
+      width: min(520px, 100%);
+      max-height: min(88vh, 720px);
+      background: var(--c-card, #1e293b);
+      color: var(--c-text, #f1f5f9);
+      border-radius: 16px 16px 0 0;
+      border: 1px solid var(--c-border, #334155);
+      display: flex; flex-direction: column;
+      box-shadow: 0 -8px 40px rgba(0,0,0,.4);
+    }
+    @media (min-width: 720px) {
+      #rutaMapsOverlay { align-items: center; padding: 1rem; }
+      .ruta-maps-modal { border-radius: 16px; max-height: 80vh; }
+    }
+    .ruta-maps-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: .75rem; padding: .85rem 1rem; border-bottom: 1px solid var(--c-border, #334155);
+    }
+    .ruta-maps-hint {
+      margin: 0; padding: .65rem 1rem; font-size: .78rem; color: var(--c-muted, #94a3b8);
+      line-height: 1.35;
+    }
+    .ruta-maps-actions {
+      display: flex; flex-wrap: wrap; gap: .4rem; padding: 0 1rem .65rem;
+    }
+    .ruta-maps-actions .btn { font-size: .78rem; }
+    .ruta-maps-list {
+      overflow: auto; flex: 1; padding: 0 .5rem .75rem;
+      -webkit-overflow-scrolling: touch;
+    }
+    .ruta-maps-item {
+      display: flex; align-items: center; gap: .55rem;
+      padding: .55rem .65rem; margin: .25rem 0;
+      border-radius: 10px; text-decoration: none;
+      color: inherit; border: 1px solid var(--c-border, #334155);
+      background: var(--c-bg, #0f172a);
+    }
+    .ruta-maps-item:active, .ruta-maps-item:hover {
+      border-color: var(--c-pri, #3B6EA5);
+      background: rgba(59,110,165,.15);
+    }
+    .ruta-maps-item .n {
+      flex-shrink: 0; width: 1.5rem; height: 1.5rem; border-radius: 999px;
+      background: var(--c-pri, #3B6EA5); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .72rem; font-weight: 700;
+    }
+    .ruta-maps-item .txt { flex: 1; min-width: 0; }
+    .ruta-maps-item .txt b { display: block; font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ruta-maps-item .txt small { display: block; font-size: .72rem; color: var(--c-muted, #94a3b8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ruta-maps-item .go { flex-shrink: 0; font-size: .78rem; font-weight: 700; color: #38bdf8; }
+
     @media (max-width: 720px) {
       .ruta-map-wrap { flex-basis: 34vh; min-height: 180px; }
     }
@@ -471,7 +531,7 @@
         </select>
         <button type="button" class="btn btn-outline btn-sm" id="btnRutaMiUbicacion" style="width:100%;margin-top:.5rem">📍 Usar mi ubicación</button>
         <p class="cons-status" id="rutaGeoYo" style="font-size:.7rem;margin-top:.25rem">Origen: aún no capturado</p>
-        <button type="button" class="btn btn-primary btn-sm" id="btnRutaMaps" style="width:100%;margin-top:.45rem">Maps · transporte elegido</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btnRutaMaps" style="width:100%;margin-top:.45rem">Maps · tramos / elegir parada</button>
         <button type="button" class="btn btn-outline btn-sm" id="btnRutaPublicar" style="width:100%;margin-top:.35rem">Publicar a vendedores</button>
         <p class="cons-status" id="rutaStats" style="font-size:.72rem;margin-top:.4rem"></p>
       </div>
