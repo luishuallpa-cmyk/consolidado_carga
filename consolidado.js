@@ -15,6 +15,12 @@
   var vista = 'detalle'; // detalle | consolidado
   var STORAGE_KEY = 'iem_consolidado_carga_v1';
   var lastImportFiles = null; // FileList o array para re-leer carpeta
+  var dirHandleCarga = null; // FileSystemDirectoryHandle (Chrome/Edge)
+  var lastCarpetaSig = ''; // nombre|mtime del último Excel procesado
+  var _watchCarpetaTimer = null;
+  var _watchCarpetaBusy = false;
+  var IDB_NAME = 'iem_consolidado_fs';
+  var IDB_STORE = 'handles';
 
   function $(id) { return document.getElementById(id); }
 
@@ -246,6 +252,204 @@
     }
     var sheet = wb.Sheets[name];
     return XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  }
+
+
+  function supportsDirPicker() {
+    return typeof window.showDirectoryPicker === 'function';
+  }
+
+  function openIdb() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+
+  async function saveDirHandle(handle) {
+    try {
+      var db = await openIdb();
+      await new Promise(function (resolve, reject) {
+        var tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(handle, 'carga');
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+      db.close();
+    } catch (e) {
+      console.warn('[IEM] no se pudo guardar handle carpeta', e);
+    }
+  }
+
+  async function loadDirHandle() {
+    try {
+      var db = await openIdb();
+      var handle = await new Promise(function (resolve, reject) {
+        var tx = db.transaction(IDB_STORE, 'readonly');
+        var req = tx.objectStore(IDB_STORE).get('carga');
+        req.onsuccess = function () { resolve(req.result || null); };
+        req.onerror = function () { reject(req.error); };
+      });
+      db.close();
+      return handle || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function ensureDirPermission(handle, mode) {
+    if (!handle) return false;
+    mode = mode || 'read';
+    try {
+      var q = await handle.queryPermission({ mode: mode });
+      if (q === 'granted') return true;
+      var r = await handle.requestPermission({ mode: mode });
+      return r === 'granted';
+    } catch (e) {
+      console.warn('[IEM] permiso carpeta', e);
+      return false;
+    }
+  }
+
+  function setCarpetaStatus(msg) {
+    var el = $('consCarpetaStatus');
+    if (el) {
+      el.hidden = !msg;
+      el.textContent = msg || '';
+    }
+  }
+
+  /** Lista Excel de un DirectoryHandle; devuelve el más reciente. */
+  async function pickNewestExcelFromDir(dirHandle) {
+    var candidates = [];
+    for await (var entry of dirHandle.values()) {
+      if (entry.kind !== 'file') continue;
+      if (!/\.(xlsx|xls|xlsm|csv)$/i.test(entry.name)) continue;
+      // ignorar temporales de Excel (~$...)
+      if (/^~\$-/.test(entry.name) || entry.name.indexOf('~$') === 0) continue;
+      try {
+        var file = await entry.getFile();
+        candidates.push({ name: file.name, lastModified: file.lastModified, file: file, handle: entry });
+      } catch (eF) {}
+    }
+    if (!candidates.length) return null;
+    candidates.sort(function (a, b) { return b.lastModified - a.lastModified; });
+    return candidates[0];
+  }
+
+  async function vincularCarpetaCarga() {
+    if (!supportsDirPicker()) {
+      alert('Tu navegador no permite vincular carpeta de forma permanente.\nUsa Chrome o Edge, o elige «Carpeta (una vez)».');
+      return;
+    }
+    try {
+      var handle = await window.showDirectoryPicker({
+        id: 'iem-carga',
+        mode: 'read',
+        startIn: 'documents'
+      });
+      dirHandleCarga = handle;
+      await saveDirHandle(handle);
+      lastCarpetaSig = '';
+      setCarpetaStatus('Carpeta: ' + (handle.name || 'vinculada') + ' · vigilando…');
+      toast('Carpeta vinculada. Al reemplazar el Excel se actualizará solo.');
+      await escanearCarpetaCarga(true);
+      startWatchCarpeta();
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      console.warn(e);
+      alert('No se pudo vincular la carpeta: ' + ((e && e.message) || e));
+    }
+  }
+
+  /**
+   * Lee la carpeta vinculada. Si hay Excel nuevo o forzar=true, importa y opcionalmente genera PDF.
+   */
+  async function escanearCarpetaCarga(forzar) {
+    if (!dirHandleCarga || _watchCarpetaBusy) return;
+    _watchCarpetaBusy = true;
+    try {
+      var ok = await ensureDirPermission(dirHandleCarga, 'read');
+      if (!ok) {
+        setCarpetaStatus('Permiso de carpeta revocado. Vuelve a vincular.');
+        return;
+      }
+      var newest = await pickNewestExcelFromDir(dirHandleCarga);
+      if (!newest) {
+        setCarpetaStatus('Carpeta «' + (dirHandleCarga.name || '') + '»: sin Excel');
+        return;
+      }
+      var sig = newest.name + '|' + newest.lastModified;
+      setCarpetaStatus('📁 ' + newest.name + (forzar || sig !== lastCarpetaSig ? ' · leyendo…' : ' · al día'));
+      if (!forzar && sig === lastCarpetaSig) return;
+
+      await importarArchivos([newest.file]);
+      lastCarpetaSig = sig;
+      setCarpetaStatus('📁 ' + newest.name + ' · actualizado');
+
+      var autoPdf = true;
+      try {
+        var cb = $('consAutoPdf');
+        if (cb) autoPdf = !!cb.checked;
+      } catch (eC) {}
+      if (autoPdf && lineas && lineas.length) {
+        try {
+          // PDF de todos los camiones (vista multi)
+          if (typeof renderVistaPreviaPanel === 'function') {
+            renderVistaPreviaPanel('multi');
+          }
+        } catch (eP) {
+          console.warn('[IEM] auto PDF', eP);
+        }
+      }
+    } catch (e) {
+      console.warn('[IEM] escanear carpeta', e);
+      setCarpetaStatus('Error leyendo carpeta');
+    } finally {
+      _watchCarpetaBusy = false;
+    }
+  }
+
+  function startWatchCarpeta() {
+    stopWatchCarpeta();
+    if (!dirHandleCarga) return;
+    _watchCarpetaTimer = setInterval(function () {
+      if (document.body.classList.contains('mode-carga') || !$('consWorkspace') || !$('consWorkspace').hidden) {
+        escanearCarpetaCarga(false);
+      }
+    }, 12000); // cada 12 s
+  }
+
+  function stopWatchCarpeta() {
+    if (_watchCarpetaTimer) {
+      clearInterval(_watchCarpetaTimer);
+      _watchCarpetaTimer = null;
+    }
+  }
+
+  async function restaurarCarpetaVinculada() {
+    if (!supportsDirPicker()) return;
+    try {
+      var h = await loadDirHandle();
+      if (!h) return;
+      dirHandleCarga = h;
+      var ok = await ensureDirPermission(h, 'read');
+      if (!ok) {
+        setCarpetaStatus('Carpeta guardada: toca «Vincular» para dar permiso de nuevo');
+        return;
+      }
+      setCarpetaStatus('Carpeta: ' + (h.name || 'vinculada') + ' · actualizando…');
+      startWatchCarpeta();
+      // Al abrir la app: leer Excel más reciente y armar vista
+      await escanearCarpetaCarga(true);
+    } catch (e) {
+      console.warn('[IEM] restaurar carpeta', e);
+    }
   }
 
   async function importarArchivos(fileList) {
@@ -642,6 +846,104 @@
       return y + 18;
     }
 
+    /**
+     * Cuadro de control (1ª hoja de cada camión) — para rellenar a mano.
+     * Devuelve Y inferior del bloque.
+     */
+    function drawVehicleForm(doc, camion, fecha) {
+      var y0 = marginTop + 17;
+      var boxH = 34;
+      var x = marginX;
+      var w = contentW;
+      var rowH = 7.2;
+
+      // Fondo y borde
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(30, 58, 95);
+      doc.setLineWidth(0.45);
+      doc.roundedRect(x, y0, w, boxH, 1.5, 1.5, 'FD');
+
+      // Barra lateral azul
+      doc.setFillColor(30, 58, 95);
+      doc.rect(x, y0, 3.2, boxH, 'F');
+
+      // Parse fecha YYYY-MM-DD o similar
+      var dia = '', mes = '', anio = '';
+      var fs = String(fecha || '').trim();
+      var m = fs.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (m) {
+        anio = m[1];
+        mes = m[2].length === 1 ? '0' + m[2] : m[2];
+        dia = m[3].length === 1 ? '0' + m[3] : m[3];
+      } else {
+        var m2 = fs.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+        if (m2) {
+          dia = m2[1].length === 1 ? '0' + m2[1] : m2[1];
+          mes = m2[2].length === 1 ? '0' + m2[2] : m2[2];
+          anio = m2[3].length === 2 ? '20' + m2[3] : m2[3];
+        }
+      }
+
+      // --- Fila 1: CAMIÓN N° + cajas DIA MES AÑO ---
+      var y = y0 + 5.5;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(30, 58, 95);
+      doc.text('CAMIÓN N°:', x + 6, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(15, 23, 42);
+      var camLabel = String(camion || '').replace(/^CAMION\s*/i, '').trim();
+      doc.text(camLabel || String(camion || ''), x + 28, y);
+      // línea de escritura
+      doc.setDrawColor(148, 163, 184);
+      doc.setLineWidth(0.25);
+      doc.line(x + 28, y + 1.2, x + w - 52, y + 1.2);
+
+      // Mini cajas fecha
+      var cellW = 12;
+      var cellH = 8;
+      var fx = x + w - 6 - cellW * 3 - 4;
+      var fy = y0 + 2.5;
+      var labels = ['DÍA', 'MES', 'AÑO'];
+      var vals = [dia, mes, anio];
+      for (var i = 0; i < 3; i++) {
+        var cx = fx + i * (cellW + 2);
+        doc.setDrawColor(30, 58, 95);
+        doc.setLineWidth(0.3);
+        doc.setFillColor(255, 255, 255);
+        doc.rect(cx, fy, cellW, cellH, 'FD');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(5.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text(labels[i], cx + cellW / 2, fy + 2.4, { align: 'center' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(15, 23, 42);
+        if (vals[i]) doc.text(String(vals[i]), cx + cellW / 2, fy + 6.2, { align: 'center' });
+      }
+
+      // --- Filas de campos ---
+      var fields = [
+        'PLACA DEL VEHÍCULO:',
+        'TRANSPORTISTA / CONDUCTOR:',
+        'PICKING — PREPARÓ (CARGA):'
+      ];
+      for (var fi = 0; fi < fields.length; fi++) {
+        y = y0 + 12 + fi * rowH;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(30, 58, 95);
+        doc.text(fields[fi], x + 6, y);
+        var labelW = doc.getTextWidth(fields[fi]) + 2;
+        doc.setDrawColor(148, 163, 184);
+        doc.setLineWidth(0.3);
+        doc.line(x + 6 + labelW, y + 0.8, x + w - 4, y + 0.8);
+      }
+
+      return y0 + boxH + 3;
+    }
+
     function drawFooter(doc, camion, numHoja, totalHojas) {
       var y = pageH - 11;
       doc.setDrawColor(29, 78, 216);
@@ -760,6 +1062,10 @@
         firstPage = false;
 
         var startY = drawHeader(pdf, h.camion, h.fecha, pi + 1, totalCam);
+        // Cuadro vehículo solo en la 1ª hoja de cada camión
+        if (pi === 0) {
+          startY = drawVehicleForm(pdf, h.camion, h.fecha);
+        }
         var body = buildTableBody(part.rows, offset);
 
         if (!body.length) {
@@ -1099,8 +1405,8 @@
 
   /** Ítems por hoja (A4 con cabecera IEM + grupos). Más denso = menos páginas vacías. */
   // Capacidad: fila=1, header categoría≈1, banner FRIOS/SECOS≈1
-  var UNIDADES_POR_HOJA = 36;
-  var ITEMS_POR_HOJA = 26; // cabe en A4 con cabecera + pie (autoTable)
+  var UNIDADES_POR_HOJA = 32;
+  var ITEMS_POR_HOJA = 22; // cabecera + cuadro vehículo + pie
 
   function pesoVisualFila(it, prevTipo, prevCat) {
     var u = 1;
@@ -1698,19 +2004,73 @@
     });
     var btnRef = $('btnConsRefrescarCarpeta');
     if (btnRef) btnRef.addEventListener('click', function () {
-      if (lastImportFiles && lastImportFiles.length) {
+      if (dirHandleCarga) {
+        escanearCarpetaCarga(true);
+      } else if (lastImportFiles && lastImportFiles.length) {
         importarArchivos(lastImportFiles);
       } else {
-        alert('Primero elige un Excel o una carpeta.');
+        alert('Vincula una carpeta o elige un Excel primero.');
       }
     });
-    // Al volver a la pestaña, re-leer última importación (carpeta del día)
+    var btnVin = $('btnVincularCarpeta');
+    if (btnVin) btnVin.addEventListener('click', function () { vincularCarpetaCarga(); });
+    var cbAuto = $('consAutoPdf');
+    if (cbAuto) {
+      try {
+        var saved = localStorage.getItem('iem_auto_pdf');
+        if (saved === '0') cbAuto.checked = false;
+        if (saved === '1') cbAuto.checked = true;
+      } catch (eA) {}
+      cbAuto.addEventListener('change', function () {
+        try { localStorage.setItem('iem_auto_pdf', cbAuto.checked ? '1' : '0'); } catch (e) {}
+      });
+    }
+    // Al volver a la pestaña: re-escanear carpeta vinculada o última importación
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState !== 'visible') return;
-      if (lastImportFiles && lastImportFiles.length) {
+      if (dirHandleCarga) {
+        escanearCarpetaCarga(false);
+      } else if (lastImportFiles && lastImportFiles.length) {
         try { importarArchivos(lastImportFiles); } catch (eR) {}
       }
     });
+    // Panel config (+) solo admin — doble clic o pulsación larga
+    (function () {
+      var btn = $('btnAdminConfig');
+      var panel = $('consAdminPanel');
+      var btnClose = $('btnAdminCerrar');
+      if (!btn || !panel) return;
+      var pressTimer = null;
+      function openAdmin() {
+        panel.hidden = false;
+        btn.style.opacity = '0.85';
+      }
+      function closeAdmin() {
+        panel.hidden = true;
+        btn.style.opacity = '';
+      }
+      btn.addEventListener('dblclick', function (ev) {
+        ev.preventDefault();
+        openAdmin();
+      });
+      btn.addEventListener('click', function (ev) {
+        // un clic solo no abre (evita toques accidentales)
+        ev.preventDefault();
+      });
+      btn.addEventListener('pointerdown', function () {
+        pressTimer = setTimeout(function () { openAdmin(); }, 650);
+      });
+      btn.addEventListener('pointerup', function () {
+        if (pressTimer) clearTimeout(pressTimer);
+        pressTimer = null;
+      });
+      btn.addEventListener('pointerleave', function () {
+        if (pressTimer) clearTimeout(pressTimer);
+        pressTimer = null;
+      });
+      if (btnClose) btnClose.addEventListener('click', closeAdmin);
+    })();
+
   }
 
 
@@ -2789,7 +3149,9 @@
       // UI primero; PDF en el siguiente tick (menos demora al entrar)
       setTimeout(function () {
         try {
-          if (typeof lineas !== 'undefined' && lineas.length && typeof renderVistaPreviaPanel === 'function') {
+          if (dirHandleCarga) {
+            escanearCarpetaCarga(true);
+          } else if (typeof lineas !== 'undefined' && lineas.length && typeof renderVistaPreviaPanel === 'function') {
             renderVistaPreviaPanel();
           }
         } catch (eP) { console.warn('[IEM] pdf', eP); }
@@ -2873,6 +3235,7 @@
     try { restaurarTema(); } catch (eT) { console.warn('tema', eT); }
     try { bindTemaOnce(); } catch (eTb) { console.warn('bindTema', eTb); }
     try { bind(); } catch (eB) { console.error('bind', eB); }
+    try { restaurarCarpetaVinculada(); } catch (eF) { console.warn('carpeta', eF); }
     try { bindRuta(); } catch (eR) { console.error('bindRuta', eR); }
     try { mostrarChooser(); } catch (eC) {}
     try { loadLocal(); } catch (eL) {}
