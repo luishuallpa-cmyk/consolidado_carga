@@ -610,7 +610,7 @@
         'background:#ffffff',
         'color:#0f172a',
         'font-family:Segoe UI,Arial,sans-serif',
-        'font-size:9.5px',
+        'font-size:10px',
         'line-height:1.15',
         'display:flex',
         'flex-direction:column'
@@ -630,7 +630,7 @@
       if (head) head.style.flex = '0 0 auto';
       // Compactar tablas internas (más filas por hoja)
       el.querySelectorAll('table').forEach(function (tb) {
-        tb.style.fontSize = '9px';
+        tb.style.fontSize = '10px';
         tb.style.borderCollapse = 'collapse';
         tb.style.width = '100%';
       });
@@ -651,11 +651,10 @@
       });
     });
 
-    // Escala baja = mucho más rápido (html2canvas es el cuello de botella).
-    // 1.15 ≈ legible en pantalla/impresión; 1.5 era ~70% más lento y 2.25× más píxeles.
-    var SCALE = 1.1;
+    // Escala 2 ≈ texto nítido al imprimir (antes 1.1 se veía borroso como foto).
+    // JPEG 0.92 + compresión NORMAL mantiene calidad sin inflar tanto el archivo.
+    var SCALE = 2;
     var pdf = new Jspdf({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
-    // Secuencial: menos pico de memoria y UI más estable que Promise.all de N páginas
     for (var i = 0; i < els.length; i++) {
       var el = els[i];
       var canvas = await html2canvas(el, {
@@ -672,13 +671,14 @@
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
-        imageTimeout: 1500,
-        removeContainer: true
+        imageTimeout: 2500,
+        removeContainer: true,
+        letterRendering: true
       });
       if (!canvas || !canvas.width) continue;
-      var img = canvas.toDataURL('image/jpeg', 0.68);
+      var img = canvas.toDataURL('image/jpeg', 0.92);
       if (i > 0) pdf.addPage();
-      pdf.addImage(img, 'JPEG', 5, 5, 200, 287, undefined, 'FAST');
+      pdf.addImage(img, 'JPEG', 5, 5, 200, 287, undefined, 'NONE');
       // Liberar canvas cuanto antes
       try {
         var ctx = canvas.getContext('2d');
@@ -1090,8 +1090,8 @@
           '<th style="border:1px solid #94a3b8;padding:4px 5px;text-align:center;">Código</th>' +
           '<th style="border:1px solid #94a3b8;padding:4px 5px;text-align:left;">Producto / Descripción</th>' +
           '<th style="border:1px solid #94a3b8;padding:4px 5px;text-align:center;">Unidad</th>' +
-          '<th style="border:1px solid #94a3b8;padding:4px 5px;text-align:center;">Cajas</th>' +
-          '<th style="border:1px solid #94a3b8;padding:4px 5px;text-align:center;">Und. sueltas</th>' +
+          '<th style="border:1px solid #b45309;padding:4px 5px;text-align:center;background:#fbbf24;color:#78350f;font-weight:800;">CAJAS</th>' +
+          '<th style="border:1px solid #94a3b8;padding:4px 5px;text-align:center;font-size:8pt;">Und. sueltas</th>' +
           '<th style="border:1px solid #94a3b8;padding:4px 5px;text-align:center;">Peso</th></tr></thead><tbody>';
         tableOpen = true;
       }
@@ -1104,8 +1104,9 @@
         '<td style="border:1px solid #cbd5e1;padding:3px 5px;text-align:center;font-family:ui-monospace,monospace;font-weight:600;white-space:nowrap;">' + esc(it.codigo) + '</td>' +
         '<td style="border:1px solid #cbd5e1;padding:3px 5px;text-align:left;word-wrap:break-word;overflow-wrap:break-word;">' + esc(it.descripcion) + '</td>' +
         '<td style="border:1px solid #cbd5e1;padding:3px 5px;text-align:center;white-space:nowrap;font-size:8pt;">' + esc(it.unidad_ref || '') + '</td>' +
-        '<td style="border:1px solid #cbd5e1;padding:3px 5px;text-align:center;white-space:nowrap;">' + (cu.cajas === '' ? '' : cu.cajas) + '</td>' +
-        '<td style="border:1px solid #cbd5e1;padding:3px 5px;text-align:center;white-space:nowrap;">' + cu.sueltas + '</td>' +
+        '<td style="border:1px solid #b45309;padding:3px 5px;text-align:center;white-space:nowrap;background:#fef3c7;font-weight:800;font-size:10.5pt;color:#92400e;">' +
+          (cu.cajas === '' || cu.cajas === 0 || cu.cajas === '0' ? '—' : cu.cajas) + '</td>' +
+        '<td style="border:1px solid #cbd5e1;padding:3px 5px;text-align:center;white-space:nowrap;color:#475569;">' + cu.sueltas + '</td>' +
         '<td style="border:1px solid #cbd5e1;padding:3px 5px;text-align:right;white-space:nowrap;">' + fmtPeso(it.peso) + '</td></tr>';
   });
     closeTable();
