@@ -590,7 +590,7 @@
      */
     var PAGE_W = 794;
     var PAGE_H = 1123;
-    var PAD = 16; // ~4.2 mm — más área útil
+    var PAD = 36; // ~9.5 mm — margen a los cantos
 
     host.style.cssText = 'position:fixed;left:0;top:0;width:' + PAGE_W +
       'px;background:#fff;z-index:-1;opacity:0.01;pointer-events:none;overflow:visible;';
@@ -635,7 +635,7 @@
         tb.style.width = '100%';
       });
       el.querySelectorAll('th,td').forEach(function (c) {
-        c.style.padding = '1.5px 3px';
+        c.style.padding = '2.5px 5px';
       });
       el.querySelectorAll('.print-header').forEach(function (h) {
         h.style.marginBottom = '5px';
@@ -678,7 +678,7 @@
       if (!canvas || !canvas.width) continue;
       var img = canvas.toDataURL('image/jpeg', 0.68);
       if (i > 0) pdf.addPage();
-      pdf.addImage(img, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+      pdf.addImage(img, 'JPEG', 5, 5, 200, 287, undefined, 'FAST');
       // Liberar canvas cuanto antes
       try {
         var ctx = canvas.getContext('2d');
@@ -1075,15 +1075,24 @@
         html += '<div style="font-weight:700;margin:5px 0 2px;font-size:8.5pt;background:#1e3a5f;color:#fff;padding:3px 8px;border-radius:5px;' +
           'page-break-after:avoid;break-after:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact;">' +
           esc(lastCat) + '</div>';
-        html += '<table class="cons-print-table" style="width:100%;border-collapse:collapse;font-size:8.5pt;margin-bottom:4px;page-break-inside:auto;">' +
+        html += '<table class="cons-print-table" style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:8.5pt;margin:0 0 6px 0;page-break-inside:auto;">' +
+          '<colgroup>' +
+          '<col style="width:6%">' +
+          '<col style="width:9%">' +
+          '<col style="width:42%">' +
+          '<col style="width:11%">' +
+          '<col style="width:10%">' +
+          '<col style="width:12%">' +
+          '<col style="width:10%">' +
+          '</colgroup>' +
           '<thead style="display:table-header-group;-webkit-print-color-adjust:exact;print-color-adjust:exact;"><tr style="background:#e2e8f0;-webkit-print-color-adjust:exact;print-color-adjust:exact;">' +
-          '<th style="border:1px solid #94a3b8;padding:3px 3px;width:40px;">ITEM</th>' +
-          '<th style="border:1px solid #94a3b8;padding:3px 3px;width:56px;">Código</th>' +
-          '<th style="border:1px solid #94a3b8;padding:3px 3px;">Producto / Descripción</th>' +
-          '<th style="border:1px solid #94a3b8;padding:3px 3px;width:60px;">Unidad</th>' +
-          '<th style="border:1px solid #94a3b8;padding:3px 3px;width:48px;">Cajas</th>' +
-          '<th style="border:1px solid #94a3b8;padding:3px 3px;width:56px;">Und. sueltas</th>' +
-          '<th style="border:1px solid #94a3b8;padding:3px 3px;width:56px;">Peso</th></tr></thead><tbody>';
+          '<th style="border:1px solid #94a3b8;padding:4px 5px;text-align:center;">ITEM</th>' +
+          '<th style="border:1px solid #94a3b8;padding:4px 5px;text-align:center;">Código</th>' +
+          '<th style="border:1px solid #94a3b8;padding:4px 5px;text-align:left;">Producto / Descripción</th>' +
+          '<th style="border:1px solid #94a3b8;padding:4px 5px;text-align:center;">Unidad</th>' +
+          '<th style="border:1px solid #94a3b8;padding:4px 5px;text-align:center;">Cajas</th>' +
+          '<th style="border:1px solid #94a3b8;padding:4px 5px;text-align:center;">Und. sueltas</th>' +
+          '<th style="border:1px solid #94a3b8;padding:4px 5px;text-align:center;">Peso</th></tr></thead><tbody>';
         tableOpen = true;
       }
       n++;
@@ -1091,14 +1100,14 @@
       var fac = Number(it.factor) > 1 ? Number(it.factor) : 1;
       var cu = cantACajasUnd(it.cantidad, fac);
       html += '<tr style="page-break-inside:avoid;">' +
-        '<td style="border:1px solid #cbd5e1;padding:2px 3px;text-align:center;">' + n + '</td>' +
-        '<td style="border:1px solid #cbd5e1;padding:2px 3px;font-family:monospace;font-weight:600;">' + esc(it.codigo) + '</td>' +
-        '<td style="border:1px solid #cbd5e1;padding:2px 3px;">' + esc(it.descripcion) + '</td>' +
-        '<td style="border:1px solid #cbd5e1;padding:2px 3px;">' + esc(it.unidad_ref || '') + '</td>' +
-        '<td style="border:1px solid #cbd5e1;padding:2px 3px;text-align:center;">' + (cu.cajas === '' ? '' : cu.cajas) + '</td>' +
-        '<td style="border:1px solid #cbd5e1;padding:2px 3px;text-align:center;">' + cu.sueltas + '</td>' +
-        '<td style="border:1px solid #cbd5e1;padding:2px 3px;text-align:right;">' + fmtPeso(it.peso) + '</td></tr>';
-    });
+        '<td style="border:1px solid #cbd5e1;padding:3px 5px;text-align:center;white-space:nowrap;">' + n + '</td>' +
+        '<td style="border:1px solid #cbd5e1;padding:3px 5px;text-align:center;font-family:ui-monospace,monospace;font-weight:600;white-space:nowrap;">' + esc(it.codigo) + '</td>' +
+        '<td style="border:1px solid #cbd5e1;padding:3px 5px;text-align:left;word-wrap:break-word;overflow-wrap:break-word;">' + esc(it.descripcion) + '</td>' +
+        '<td style="border:1px solid #cbd5e1;padding:3px 5px;text-align:center;white-space:nowrap;font-size:8pt;">' + esc(it.unidad_ref || '') + '</td>' +
+        '<td style="border:1px solid #cbd5e1;padding:3px 5px;text-align:center;white-space:nowrap;">' + (cu.cajas === '' ? '' : cu.cajas) + '</td>' +
+        '<td style="border:1px solid #cbd5e1;padding:3px 5px;text-align:center;white-space:nowrap;">' + cu.sueltas + '</td>' +
+        '<td style="border:1px solid #cbd5e1;padding:3px 5px;text-align:right;white-space:nowrap;">' + fmtPeso(it.peso) + '</td></tr>';
+  });
     closeTable();
     return { html: html, lastItem: n };
   }
@@ -1145,7 +1154,7 @@
     return '<div class="print-page" data-camion="' + esc(camion || '') + '" data-hoja="' + numHoja +
       '" data-total="' + totalHojas + '" style="page-break-after:always;break-after:page;' +
       'font-family:Segoe UI,Arial,sans-serif;color:#0f172a;background:#fff;box-sizing:border-box;' +
-      'width:190mm;height:277mm;min-height:277mm;max-height:277mm;overflow:hidden;' +
+      'width:190mm;height:277mm;min-height:277mm;max-height:277mm;overflow:hidden;padding:8mm 10mm;' +
       'padding:0;margin:0 auto 12px auto;' +
       'display:flex;flex-direction:column;' +
       '-webkit-print-color-adjust:exact;print-color-adjust:exact;">' +
@@ -1414,6 +1423,34 @@
     await cargarCatalogo();
   }
 
+
+  function isLightTheme() {
+    return document.body.classList.contains('light-theme');
+  }
+
+  function aplicarTema(modo) {
+    var light = (modo === 'light');
+    document.body.classList.toggle('light-theme', light);
+    try { localStorage.setItem('iem_cons_theme', light ? 'light' : 'dark'); } catch (e) {}
+    // Actualizar title de botones
+    document.querySelectorAll('#chooserTema, #btnConsTema').forEach(function (btn) {
+      if (!btn) return;
+      btn.title = light ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro';
+      btn.setAttribute('aria-label', btn.title);
+    });
+  }
+
+  function toggleTema() {
+    aplicarTema(isLightTheme() ? 'dark' : 'light');
+  }
+
+  function restaurarTema() {
+    var saved = null;
+    try { saved = localStorage.getItem('iem_cons_theme'); } catch (e) {}
+    if (saved === 'light') aplicarTema('light');
+    else aplicarTema('dark');
+  }
+
   function bind() {
     // Atajos del menú inicial (por si bindRuta falla)
     try {
@@ -1431,8 +1468,8 @@
       };
       if (ct) ct.onclick = function (ev) {
         console.log('[IEM] click Tema');
-        document.body.classList.toggle('light-theme');
-        try { localStorage.setItem('iem_cons_theme', document.body.classList.contains('light-theme') ? 'light' : 'dark'); } catch (e) {}
+        ev.preventDefault();
+        toggleTema();
       };
     } catch (eCh) { console.warn(eCh); }
 
@@ -1471,9 +1508,9 @@
     if ($('btnConsPreviewUno')) $('btnConsPreviewUno').addEventListener('click', function () { imprimir('uno', false); });
     if ($('btnConsPreviewMulti')) $('btnConsPreviewMulti').addEventListener('click', function () { imprimir('multi', false); });
     if ($('btnConsDescontar')) $('btnConsDescontar').addEventListener('click', function () { descontarInventario(); });
-    if ($('btnConsTema')) $('btnConsTema').addEventListener('click', function () {
-      document.body.classList.toggle('light-theme');
-      try { localStorage.setItem('iem_cons_theme', document.body.classList.contains('light-theme') ? 'light' : 'dark'); } catch (e) {}
+    if ($('btnConsTema')) $('btnConsTema').addEventListener('click', function (ev) {
+      ev.preventDefault();
+      toggleTema();
     });
     if ($('consFiltroTipo')) $('consFiltroTipo').addEventListener('change', renderTabla);
     if ($('consFiltroCamion')) $('consFiltroCamion').addEventListener('change', function () {
@@ -2598,15 +2635,12 @@
         mostrarChooser();
       });
     }
-    if ($('chooserTema') && $('btnConsTema')) {
-      $('chooserTema').addEventListener('click', function () {
-        console.log('[IEM] click tema → btnConsTema');
-        $('btnConsTema').click();
-      });
-    } else if ($('chooserTema')) {
-      $('chooserTema').addEventListener('click', function () {
-        console.log('[IEM] click tema toggle');
-        document.body.classList.toggle('light-theme');
+    // Tema: ya se enlaza en bind() vía onclick; refuerzo con listener
+    if ($('chooserTema')) {
+      $('chooserTema').addEventListener('click', function (ev) {
+        console.log('[IEM] click tema (bindRuta)');
+        ev.preventDefault();
+        toggleTema();
       });
     }
 
@@ -2659,6 +2693,7 @@
   }
 
   async function main() {
+    try { restaurarTema(); } catch (eT) { console.warn('tema', eT); }
     try { bind(); } catch (eB) { console.error('bind', eB); }
     try { bindRuta(); } catch (eR) { console.error('bindRuta', eR); }
     try { mostrarChooser(); } catch (eC) {}

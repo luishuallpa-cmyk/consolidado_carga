@@ -495,6 +495,43 @@
         linear-gradient(rgba(100,116,139,.1) 1px, transparent 1px),
         linear-gradient(90deg, rgba(100,116,139,.1) 1px, transparent 1px);
     }
+
+    /* Botón sol / luna */
+    .btn-theme {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.75rem;
+      height: 2.75rem;
+      margin-top: 1.1rem;
+      border-radius: 999px;
+      border: 1px solid var(--c-border);
+      background: var(--c-bg);
+      color: var(--c-text);
+      cursor: pointer;
+      font-size: 1.35rem;
+      line-height: 1;
+      position: relative;
+      z-index: 3;
+      transition: transform .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+    .btn-theme:hover, .btn-theme:focus-visible {
+      border-color: var(--c-pri);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-pri) 30%, transparent);
+      transform: scale(1.06);
+      outline: none;
+    }
+    .btn-theme-side {
+      width: 100%;
+      margin-top: 0.5rem;
+      border-radius: 12px;
+      height: 2.5rem;
+    }
+    .btn-theme .theme-icon { display: none; }
+    /* Oscuro por defecto → mostrar luna (para ir a claro) */
+    body:not(.light-theme) .btn-theme .theme-icon-moon { display: inline; }
+    body.light-theme .btn-theme .theme-icon-sun { display: inline; }
+
     .chooser-card {
       width: min(640px, 100%);
       background: var(--c-card);
@@ -638,7 +675,10 @@
           <span class="chooser-desc">Paradas · mapa · GPS</span>
         </button>
       </div>
-      <button type="button" class="btn btn-outline btn-sm" id="chooserTema" style="margin-top:1.1rem">🌓 Tema</button>
+      <button type="button" class="btn-theme" id="chooserTema" title="Cambiar tema" aria-label="Cambiar tema claro u oscuro">
+        <span class="theme-icon theme-icon-sun" aria-hidden="true">☀️</span>
+        <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
+      </button>
     </div>
   </div>
 
@@ -696,7 +736,10 @@
         <div class="step-label"><span class="step-n">3</span> Descargar</div>
         <button type="button" class="btn btn-primary" id="btnConsPrintUno" style="width:100%;padding:.65rem;font-weight:700">PDF camión</button>
         <button type="button" class="btn btn-outline" id="btnConsPrintMulti" style="width:100%;margin-top:.4rem;padding:.55rem">PDF todos</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btnConsTema" style="width:100%;margin-top:.5rem">🌓</button>
+        <button type="button" class="btn-theme btn-theme-side" id="btnConsTema" title="Cambiar tema" aria-label="Cambiar tema">
+          <span class="theme-icon theme-icon-sun" aria-hidden="true">☀️</span>
+          <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
+        </button>
       </div>
 
       <div class="cons-side-block panel-ruta" id="panelSideRuta" hidden>
