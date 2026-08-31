@@ -1441,7 +1441,25 @@
   }
 
   function toggleTema() {
-    aplicarTema(isLightTheme() ? 'dark' : 'light');
+    var next = isLightTheme() ? 'dark' : 'light';
+    console.log('[IEM] toggleTema →', next);
+    aplicarTema(next);
+  }
+
+  var _temaBound = false;
+  function bindTemaOnce() {
+    if (_temaBound) return;
+    _temaBound = true;
+    document.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t) return;
+      var btn = t.closest ? t.closest('#chooserTema, #btnConsTema') : null;
+      if (!btn && (t.id === 'chooserTema' || t.id === 'btnConsTema')) btn = t;
+      if (!btn) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      toggleTema();
+    }, true);
   }
 
   function restaurarTema() {
@@ -1466,11 +1484,8 @@
         console.log('[IEM] click Geolocalización', ev && ev.type);
         abrirModulo('ruta');
       };
-      if (ct) ct.onclick = function (ev) {
-        console.log('[IEM] click Tema');
-        ev.preventDefault();
-        toggleTema();
-      };
+      // tema: bindTemaOnce() (delegación)
+
     } catch (eCh) { console.warn(eCh); }
 
     aplicarFechaReparto();
@@ -1508,10 +1523,8 @@
     if ($('btnConsPreviewUno')) $('btnConsPreviewUno').addEventListener('click', function () { imprimir('uno', false); });
     if ($('btnConsPreviewMulti')) $('btnConsPreviewMulti').addEventListener('click', function () { imprimir('multi', false); });
     if ($('btnConsDescontar')) $('btnConsDescontar').addEventListener('click', function () { descontarInventario(); });
-    if ($('btnConsTema')) $('btnConsTema').addEventListener('click', function (ev) {
-      ev.preventDefault();
-      toggleTema();
-    });
+    // tema lateral: bindTemaOnce()
+
     if ($('consFiltroTipo')) $('consFiltroTipo').addEventListener('change', renderTabla);
     if ($('consFiltroCamion')) $('consFiltroCamion').addEventListener('change', function () {
       var v = $('consFiltroCamion').value;
@@ -2635,14 +2648,8 @@
         mostrarChooser();
       });
     }
-    // Tema: ya se enlaza en bind() vía onclick; refuerzo con listener
-    if ($('chooserTema')) {
-      $('chooserTema').addEventListener('click', function (ev) {
-        console.log('[IEM] click tema (bindRuta)');
-        ev.preventDefault();
-        toggleTema();
-      });
-    }
+    // Tema solo en bind() — evita doble toggle
+
 
     if ($('btnModeCarga')) $('btnModeCarga').addEventListener('click', function () { setMode('carga'); });
     if ($('btnModeRuta')) $('btnModeRuta').addEventListener('click', function () { setMode('ruta'); });
@@ -2694,6 +2701,7 @@
 
   async function main() {
     try { restaurarTema(); } catch (eT) { console.warn('tema', eT); }
+    try { bindTemaOnce(); } catch (eTb) { console.warn('bindTema', eTb); }
     try { bind(); } catch (eB) { console.error('bind', eB); }
     try { bindRuta(); } catch (eR) { console.error('bindRuta', eR); }
     try { mostrarChooser(); } catch (eC) {}

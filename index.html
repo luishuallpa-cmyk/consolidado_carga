@@ -527,10 +527,16 @@
       border-radius: 12px;
       height: 2.5rem;
     }
-    .btn-theme .theme-icon { display: none; }
-    /* Oscuro por defecto → mostrar luna (para ir a claro) */
-    body:not(.light-theme) .btn-theme .theme-icon-moon { display: inline; }
-    body.light-theme .btn-theme .theme-icon-sun { display: inline; }
+    .btn-theme .theme-icon { display: none !important; }
+    /* Oscuro → luna; Claro → sol */
+    body:not(.light-theme) .btn-theme .theme-icon-moon { display: block !important; }
+    body.light-theme .btn-theme .theme-icon-sun { display: block !important; }
+    body.light-theme .btn-theme {
+      background: #fff;
+      border-color: #cbd5e1;
+    }
+    body.light-theme .btn-theme .theme-icon-sun circle,
+    body.light-theme .btn-theme .theme-icon-sun g { fill: #d97706; stroke: #d97706; }
 
     .chooser-card {
       width: min(640px, 100%);
@@ -676,8 +682,15 @@
         </button>
       </div>
       <button type="button" class="btn-theme" id="chooserTema" title="Cambiar tema" aria-label="Cambiar tema claro u oscuro">
-        <span class="theme-icon theme-icon-sun" aria-hidden="true">☀️</span>
-        <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
+        <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <circle cx="12" cy="12" r="4" fill="#f59e0b"/>
+          <g stroke="#f59e0b" stroke-width="2" stroke-linecap="round">
+            <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+          </g>
+        </svg>
+        <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <path fill="#e2e8f0" d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/>
+        </svg>
       </button>
     </div>
   </div>
@@ -737,8 +750,15 @@
         <button type="button" class="btn btn-primary" id="btnConsPrintUno" style="width:100%;padding:.65rem;font-weight:700">PDF camión</button>
         <button type="button" class="btn btn-outline" id="btnConsPrintMulti" style="width:100%;margin-top:.4rem;padding:.55rem">PDF todos</button>
         <button type="button" class="btn-theme btn-theme-side" id="btnConsTema" title="Cambiar tema" aria-label="Cambiar tema">
-          <span class="theme-icon theme-icon-sun" aria-hidden="true">☀️</span>
-          <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
+          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <circle cx="12" cy="12" r="4" fill="#f59e0b"/>
+            <g stroke="#f59e0b" stroke-width="2" stroke-linecap="round">
+              <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+            </g>
+          </svg>
+          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path fill="#e2e8f0" d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/>
+          </svg>
         </button>
       </div>
 
