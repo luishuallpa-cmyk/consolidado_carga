@@ -1,5 +1,5 @@
 /* IEM Consolidado — service worker mínimo (instalable PWA) */
-var CACHE = 'iem-consolidado-v1';
+var CACHE = 'iem-consolidado-v1.3.4';
 var PRECACHE = [
   './',
   './index.html',

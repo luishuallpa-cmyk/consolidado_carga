@@ -2079,11 +2079,23 @@
   // ============================================================
   var rutaParadas = []; // { vendedor, camion, cliente, nombre, direccion, lat, lng, numCp, saldo, placa, fecha }
   var clientesGeo = []; // cache from supabase
+  var _geoCache = Object.create(null); // dirección normalizada → {lat,lng} o null
+  var _geoQueueBusy = false;
 
   var miUbicacion = null; // { lat, lng }
 
+  /** GPS válido: no null/NaN y no el punto (0,0) / Null Island */
+  function esGpsValido(lat, lng) {
+    var la = Number(lat), lo = Number(lng);
+    if (!isFinite(la) || !isFinite(lo)) return false;
+    // 0,0 o valores residuales muy cercanos a cero se consideran inválidos
+    if (Math.abs(la) < 0.01 && Math.abs(lo) < 0.01) return false;
+    // Perú aprox. (lat -18..-0, lng -82..-68) — fuera de rango amplio = sospechoso pero se acepta
+    return true;
+  }
+
   function mapsLink(lat, lng) {
-    if (lat == null || lng == null) return '';
+    if (!esGpsValido(lat, lng)) return '';
     // destination only = el usuario elige cómo llegar; con origin = navegación directa
     var url = 'https://www.google.com/maps/dir/?api=1&destination=' +
       encodeURIComponent(Number(lat) + ',' + Number(lng)) + '&travelmode=driving';
@@ -2091,6 +2103,197 @@
       url += '&origin=' + encodeURIComponent(miUbicacion.lat + ',' + miUbicacion.lng);
     }
     return url;
+  }
+
+  /**
+   * Geocodifica una dirección con Nominatim (OSM). Sin API key.
+   * Bias a Perú. Respeta rate-limit (~1 req/s). Cache en memoria.
+   */
+  async function geocodeDireccion(direccion, opts) {
+    opts = opts || {};
+    var q = String(direccion || '').trim();
+    if (!q || q.length < 5) return null;
+    var key = normTxt(q);
+    if (_geoCache[key] !== undefined) return _geoCache[key];
+
+    // Añadir contexto Perú / Cusco si no lo tiene
+    var query = q;
+    if (!/peru|perú|cusco|cuzco|lima/i.test(query)) {
+      query = q + ', Cusco, Peru';
+    }
+
+    try {
+      var url = 'https://nominatim.openstreetmap.org/search?' +
+        'q=' + encodeURIComponent(query) +
+        '&format=json&limit=1&countrycodes=pe&addressdetails=0';
+      var res = await fetch(url, {
+        headers: {
+          'Accept': 'application/json',
+          // Nominatim pide User-Agent identificable
+          'User-Agent': 'IEM-ConsolidadoCarga/1.3 (reparto; contacto@local)'
+        }
+      });
+      if (!res.ok) {
+        _geoCache[key] = null;
+        return null;
+      }
+      var data = await res.json();
+      if (data && data[0] && data[0].lat && data[0].lon) {
+        var la = parseFloat(data[0].lat);
+        var lo = parseFloat(data[0].lon);
+        if (esGpsValido(la, lo)) {
+          var hit = { lat: la, lng: lo, source: 'nominatim', display: data[0].display_name || '' };
+          _geoCache[key] = hit;
+          return hit;
+        }
+      }
+      _geoCache[key] = null;
+      return null;
+    } catch (e) {
+      console.warn('[IEM] geocode', e);
+      return null; // no cachear error de red para reintentar
+    }
+  }
+
+  /**
+   * Guarda lat/lng en Supabase (clientes_ubicaciones) para reutilizar la próxima vez.
+   * También actualiza el cache en memoria. Si falla RLS, no rompe el flujo.
+   */
+  async function guardarUbicacionCliente(codigo, direccion, lat, lng) {
+    var cod = String(codigo || '').trim();
+    var dir = String(direccion || '').trim();
+    if (!cod || !dir || !esGpsValido(lat, lng)) return { ok: false, reason: 'datos' };
+
+    // Actualizar cache en memoria de inmediato
+    if (!clientesGeo._ubs) clientesGeo._ubs = [];
+    var found = false;
+    for (var i = 0; i < clientesGeo._ubs.length; i++) {
+      var u = clientesGeo._ubs[i];
+      if (String(u.cliente_codigo || '').trim() === cod && normTxt(u.direccion) === normTxt(dir)) {
+        u.latitud = lat;
+        u.longitud = lng;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      clientesGeo._ubs.push({
+        cliente_codigo: cod,
+        direccion: dir,
+        latitud: lat,
+        longitud: lng,
+        codigo_zona: null
+      });
+    }
+    // Si el cliente principal no tiene GPS, también rellenar el cache principal
+    for (var j = 0; j < clientesGeo.length; j++) {
+      if (String(clientesGeo[j].codigo || '').trim() === cod) {
+        if (!esGpsValido(clientesGeo[j].latitud, clientesGeo[j].longitud)) {
+          clientesGeo[j].latitud = lat;
+          clientesGeo[j].longitud = lng;
+          if (!clientesGeo[j].direccion) clientesGeo[j].direccion = dir;
+        }
+        break;
+      }
+    }
+
+    if (!supabase) return { ok: false, reason: 'sin-supabase' };
+
+    try {
+      // 1) Intentar upsert en clientes_ubicaciones (varias direcciones por cliente)
+      var rowUb = {
+        cliente_codigo: cod,
+        direccion: dir,
+        latitud: lat,
+        longitud: lng
+      };
+      var up = await supabase.from('clientes_ubicaciones').upsert(rowUb, {
+        onConflict: 'cliente_codigo,direccion',
+        ignoreDuplicates: false
+      });
+      if (!up.error) {
+        return { ok: true, where: 'clientes_ubicaciones' };
+      }
+      // Si no hay constraint único, intentar insert simple
+      var ins = await supabase.from('clientes_ubicaciones').insert(rowUb);
+      if (!ins.error) {
+        return { ok: true, where: 'clientes_ubicaciones-insert' };
+      }
+      console.warn('[IEM] guardar ubicacion (tabla ubicaciones):', up.error || ins.error);
+
+      // 2) Fallback: actualizar lat/lng del cliente principal si la dirección es parecida o no tiene GPS
+      var cRes = await supabase.from('clientes')
+        .select('codigo,direccion,latitud,longitud')
+        .eq('codigo', cod)
+        .maybeSingle();
+      if (cRes.data) {
+        var c = cRes.data;
+        var sinGps = !esGpsValido(c.latitud, c.longitud);
+        var mismaDir = !c.direccion || scoreDirMatch(c.direccion, dir) >= 0.55;
+        if (sinGps || mismaDir) {
+          var patch = { latitud: lat, longitud: lng };
+          if (!c.direccion && dir) patch.direccion = dir;
+          var upd = await supabase.from('clientes').update(patch).eq('codigo', cod);
+          if (!upd.error) {
+            return { ok: true, where: 'clientes' };
+          }
+          console.warn('[IEM] guardar ubicacion (clientes):', upd.error);
+        }
+      }
+      return { ok: false, reason: (up.error && up.error.message) || (ins.error && ins.error.message) || 'rls' };
+    } catch (e) {
+      console.warn('[IEM] guardar ubicacion', e);
+      return { ok: false, reason: e.message || String(e) };
+    }
+  }
+
+  /**
+   * Rellena GPS faltantes de las paradas actuales usando Nominatim.
+   * Solo las que tienen dirección y no tienen GPS válido.
+   * Rate-limit ~1.1 s entre llamadas. Guarda en Supabase lo que se resuelva.
+   */
+  async function geocodeParadasFaltantes(paradas, onProgress) {
+    if (_geoQueueBusy) return;
+    var lista = (paradas || rutaParadas).filter(function (p) {
+      return p && p.direccion && String(p.direccion).trim().length >= 5 && !esGpsValido(p.lat, p.lng);
+    });
+    if (!lista.length) {
+      if (onProgress) onProgress(0, 0, 'Nada que geocodificar');
+      return;
+    }
+    _geoQueueBusy = true;
+    var ok = 0;
+    var saved = 0;
+    try {
+      for (var i = 0; i < lista.length; i++) {
+        var p = lista[i];
+        if (onProgress) onProgress(i + 1, lista.length, p.direccion);
+        var g = await geocodeDireccion(p.direccion);
+        if (g && esGpsValido(g.lat, g.lng)) {
+          p.lat = g.lat;
+          p.lng = g.lng;
+          p._geoSource = 'nominatim';
+          ok++;
+          // Guardar en Supabase + cache
+          var r = await guardarUbicacionCliente(p.cliente, p.direccion, g.lat, g.lng);
+          if (r && r.ok) saved++;
+        }
+        // rate limit Nominatim
+        if (i < lista.length - 1) await new Promise(function (r) { setTimeout(r, 1100); });
+      }
+    } finally {
+      _geoQueueBusy = false;
+    }
+    try {
+      localStorage.setItem('iem_ruta_reparto', JSON.stringify({ ts: Date.now(), paradas: rutaParadas }));
+    } catch (e) {}
+    if (onProgress) {
+      onProgress(lista.length, lista.length,
+        'Listo · ' + ok + ' geocodificadas' + (saved ? ' · ' + saved + ' guardadas en catálogo' : ''));
+    }
+    actualizarSelectRuta();
+    renderRutaLista();
+    try { actualizarMapaRuta(); } catch (e) {}
   }
 
   /** Distancia aproximada en km (Haversine rápida). */
@@ -2111,7 +2314,7 @@
    */
   function ordenarPorCercania(puntos) {
     var con = (puntos || []).filter(function (p) {
-      return p.lat != null && p.lng != null && isFinite(Number(p.lat)) && isFinite(Number(p.lng));
+      return esGpsValido(p.lat, p.lng);
     }).map(function (p) {
       return {
         lat: Number(p.lat),
@@ -2284,7 +2487,7 @@
    */
   function abrirPanelMaps(puntos, titulo) {
     var con = (puntos || []).filter(function (p) {
-      return p.lat != null && p.lng != null && isFinite(Number(p.lat)) && isFinite(Number(p.lng));
+      return esGpsValido(p.lat, p.lng);
     });
     if (!con.length) {
       alert('No hay paradas con GPS para este transporte.');
@@ -2465,7 +2668,7 @@
     }
     var candidates = [];
     // ubicación principal del catálogo clientes
-    if (c && c.latitud != null && c.longitud != null) {
+    if (c && c.latitud != null && c.longitud != null && esGpsValido(c.latitud, c.longitud)) {
       candidates.push({
         lat: Number(c.latitud),
         lng: Number(c.longitud),
@@ -2477,7 +2680,7 @@
     var ubs = clientesGeo._ubs || [];
     for (var j = 0; j < ubs.length; j++) {
       if (String(ubs[j].cliente_codigo || '').trim() !== cod) continue;
-      if (ubs[j].latitud == null || ubs[j].longitud == null) continue;
+      if (!esGpsValido(ubs[j].latitud, ubs[j].longitud)) continue;
       candidates.push({
         lat: Number(ubs[j].latitud),
         lng: Number(ubs[j].longitud),
@@ -2488,10 +2691,10 @@
     if (!candidates.length) {
       return { lat: null, lng: null, nombreCat: c && c.nombre };
     }
-    // sin dirección en liquidación → primera con GPS
+    // sin dirección en liquidación → primera con GPS válido
     if (!dirN) {
       var first = candidates[0];
-      return { lat: isFinite(first.lat) ? first.lat : null, lng: isFinite(first.lng) ? first.lng : null, nombreCat: c && c.nombre };
+      return { lat: first.lat, lng: first.lng, nombreCat: c && c.nombre };
     }
     // elegir mejor match por dirección
     var best = null;
@@ -2505,47 +2708,91 @@
     }
     // umbral mínimo: si el mejor score es muy bajo, aún usamos el mejor disponible
     // (mejor un GPS aproximado del cliente que ninguno)
-    if (best && isFinite(best.lat) && isFinite(best.lng)) {
+    if (best && esGpsValido(best.lat, best.lng)) {
       return { lat: best.lat, lng: best.lng, nombreCat: c && c.nombre, matchScore: bestScore };
     }
     return { lat: null, lng: null, nombreCat: c && c.nombre };
   }
 
+  /** Normaliza fecha de Excel (DD/MM/YYYY, D/M/YYYY, YYYY-MM-DD, etc.) a YYYY-MM-DD */
+  function normalizeFechaStr(f) {
+    var s = String(f == null ? '' : f).trim();
+    if (!s) return '';
+    // ya ISO
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    // DD/MM/YYYY o D/M/YYYY
+    var m = s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if (m) {
+      return m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+    }
+    // Excel serial number (días desde 1899-12-30)
+    var n = Number(s);
+    if (!isNaN(n) && n > 20000 && n < 60000) {
+      var epoch = new Date(Date.UTC(1899, 11, 30));
+      epoch.setUTCDate(epoch.getUTCDate() + Math.floor(n));
+      var y = epoch.getUTCFullYear();
+      var mo = String(epoch.getUTCMonth() + 1).padStart(2, '0');
+      var d = String(epoch.getUTCDate()).padStart(2, '0');
+      return y + '-' + mo + '-' + d;
+    }
+    return s.slice(0, 10);
+  }
+
   function filaLiquidacionAParada(row) {
-    var tipo = String(valRow(row, ['Tipo', 'tipo'])).toUpperCase();
+    var tipo = String(valRow(row, [
+      'Tipo', 'tipo', 'TipoDocumento', 'Tipo Documento', 'TipoDoc', 'Tipo Doc',
+      'ClaseDocumento', 'Clase Documento'
+    ])).toUpperCase();
     // solo ventas con entrega (omitir notas crédito sin dirección útil si se desea)
     var codCli = String(valRow(row, [
       'CodigoCliente', 'CódigoCliente', 'ClienteCodigo', 'Codigo Cliente',
-      'CodCliente', 'CODIGOCLIENTE', 'Cliente', 'codigo_cliente'
+      'CodCliente', 'CODIGOCLIENTE', 'Cliente', 'codigo_cliente', 'Cod. Cliente'
     ])).trim();
     if (!codCli) {
       // fallback: buscar cualquier key que parezca código cliente
       Object.keys(row || {}).forEach(function (k) {
         if (codCli) return;
-        if (normKey(k).indexOf('CODIGOCLIENTE') >= 0 || normKey(k) === 'CODCLIENTE') {
+        if (normKey(k).indexOf('CODIGOCLIENTE') >= 0 || normKey(k) === 'CODCLIENTE' ||
+            normKey(k) === 'CLIENTE' || normKey(k).indexOf('CODCLIENTE') >= 0) {
           var v = String(row[k] || '').trim();
-          if (v) codCli = v;
+          if (v && /^\d+$/.test(v.replace(/\s/g, ''))) codCli = v;
         }
       });
     }
     if (!codCli) return null;
-    var dir = String(valRow(row, ['DireccionEntrega', 'Direccion', 'Dirección', 'Direccion Entrega'])).trim();
-    var vend = String(valRow(row, ['CodigoVendedor', 'CódigoVendedor', 'VendedorCodigo'])).trim();
-    var camion = String(valRow(row, ['NombreVehiculo', 'Camion', 'Camión', 'Vehiculo'])).trim();
+    var dir = String(valRow(row, [
+      'DireccionEntrega', 'Direccion', 'Dirección', 'Direccion Entrega',
+      'Dir. Entrega', 'Direccion de Entrega', 'Domicilio'
+    ])).trim();
+    var vend = String(valRow(row, [
+      'CodigoVendedor', 'CódigoVendedor', 'VendedorCodigo', 'Cod. Vendedor',
+      'Vendedor', 'CodVendedor'
+    ])).trim();
+    var camion = String(valRow(row, [
+      'NombreVehiculo', 'Camion', 'Camión', 'Vehiculo', 'Vehículo',
+      'Transporte', 'Nombre Transporte'
+    ])).trim();
     var latLng = matchClienteGeo(codCli, dir);
     return {
       vendedor: vend,
       camion: camion,
-      placa: String(valRow(row, ['Placa', 'placa'])).trim(),
+      placa: String(valRow(row, ['Placa', 'placa', 'PlacaVehiculo'])).trim(),
       cliente: codCli,
-      nombre: String(valRow(row, ['NombreCliente', 'ClienteNombre', 'Nombre'])).trim() || (latLng.nombreCat || ''),
+      nombre: String(valRow(row, [
+        'NombreCliente', 'ClienteNombre', 'Nombre', 'RazonSocial', 'Razón Social'
+      ])).trim() || (latLng.nombreCat || ''),
       direccion: dir,
       lat: latLng.lat,
       lng: latLng.lng,
-      numCp: String(valRow(row, ['NumCp', 'NumCP', 'Documento'])).trim(),
-      saldo: Number(String(valRow(row, ['Saldo', 'saldo'])).replace(',', '.')) || 0,
-      fecha: String(valRow(row, ['Fecha', 'fecha'])).trim(),
-      consolidado: String(valRow(row, ['NumeroConsolidado', 'Consolidado'])).trim(),
+      numCp: String(valRow(row, ['NumCp', 'NumCP', 'Documento', 'NumDocumento', 'Nro Documento', 'Serie'])).trim(),
+      saldo: Number(String(valRow(row, ['Saldo', 'saldo', 'Importe', 'Total'])).replace(',', '.')) || 0,
+      fecha: String(valRow(row, [
+        'Fecha', 'fecha', 'FechaDocumento', 'Fecha Documento', 'FecDocumento',
+        'FechaEmision', 'Fecha Emision', 'Fec. Doc.', 'FechaContable'
+      ])).trim(),
+      consolidado: String(valRow(row, [
+        'NumeroConsolidado', 'Consolidado', 'NroConsolidado', 'NumConsolidado'
+      ])).trim(),
       tipo: tipo
     };
   }
@@ -2553,15 +2800,17 @@
   function actualizarSelectRuta() {
     var sel = $('rutaFiltro');
     if (!sel) return;
+    // Usar las mismas paradas que la vista (filtradas por fecha de reparto)
+    var base = paradasFiltradasBase(); // sin filtro de camión
     var keys = {};
-    rutaParadas.forEach(function (p) {
+    base.forEach(function (p) {
       var k = p.camion || 'SIN TRANSPORTE';
       keys[k] = true;
     });
     var prev = sel.value;
     sel.innerHTML = '<option value="">Todos los transportes</option>';
     Object.keys(keys).sort().forEach(function (k) {
-      var n = rutaParadas.filter(function (p) { return (p.camion || 'SIN TRANSPORTE') === k; }).length;
+      var n = base.filter(function (p) { return (p.camion || 'SIN TRANSPORTE') === k; }).length;
       var o = document.createElement('option');
       o.value = k;
       o.textContent = k + ' (' + n + ')';
@@ -2570,10 +2819,26 @@
     if (prev && keys[prev]) sel.value = prev;
   }
 
+  /** Paradas del día (fecha de reparto), sin filtrar por camión */
+  function paradasFiltradasBase() {
+    var fechaSel = '';
+    try { fechaSel = String(($('consFecha') || {}).value || '').trim(); } catch (e) {}
+    var list = rutaParadas.slice();
+    if (fechaSel && /^\d{4}-\d{2}-\d{2}$/.test(fechaSel)) {
+      list = list.filter(function (p) {
+        var pf = normalizeFechaStr(p.fecha);
+        if (!pf || pf.length < 8) return true;
+        return pf === fechaSel;
+      });
+    }
+    return list;
+  }
+
   function paradasFiltradas() {
     var f = String(($('rutaFiltro') || {}).value || '');
-    if (!f) return rutaParadas.slice();
-    return rutaParadas.filter(function (p) {
+    var list = paradasFiltradasBase();
+    if (!f) return list;
+    return list.filter(function (p) {
       return (p.camion || 'SIN TRANSPORTE') === f;
     });
   }
@@ -2592,7 +2857,7 @@
       seen[k] = true;
       uniq.push(p);
     });
-    var conGeo = uniq.filter(function (p) { return p.lat != null && p.lng != null; }).length;
+    var conGeo = uniq.filter(function (p) { return esGpsValido(p.lat, p.lng); }).length;
     if (st) {
       st.textContent = uniq.length + ' paradas · ' + conGeo + ' con GPS · ' +
         (uniq.length - conGeo) + ' sin ubicar';
@@ -2635,12 +2900,18 @@
       if (!arrOrden.length) arrOrden = arr.map(function (p) { return { raw: p, lat: p.lat, lng: p.lng, nombre: p.nombre, cliente: p.cliente, direccion: p.direccion }; });
       arrOrden.forEach(function (po, idx) {
         var p = po.raw || po;
-        var geoCls = (p.lat != null) ? 'geo-ok' : 'geo-miss';
-        var geoTxt = (p.lat != null)
-          ? ('📍 ' + Number(p.lat).toFixed(5) + ', ' + Number(p.lng).toFixed(5))
-          : '⚠ Sin GPS en catálogo';
+        var tieneGps = esGpsValido(p.lat, p.lng);
+        var geoCls = tieneGps ? 'geo-ok' : 'geo-miss';
+        var geoTxt = tieneGps
+          ? ('📍 ' + Number(p.lat).toFixed(5) + ', ' + Number(p.lng).toFixed(5) +
+            (p._geoSource === 'nominatim' ? ' · OSM' : ''))
+          : '⚠ Sin GPS válido';
         var one = mapsLink(p.lat, p.lng);
-        html += '<div class="ruta-card">' +
+        // Link de búsqueda en Google Maps por dirección (útil cuando no hay GPS)
+        var searchUrl = p.direccion
+          ? ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(p.direccion + ', Cusco, Peru'))
+          : '';
+        html += '<div class="ruta-card" data-cliente="' + esc(p.cliente) + '">' +
           '<h4>' + (idx + 1) + '. ' + esc(p.nombre || p.cliente) + ' <span class="meta">(' + esc(p.cliente) + ')</span></h4>' +
           '<div class="meta">' + esc(p.direccion || '—') + '</div>' +
           '<div class="meta">Vend ' + esc(p.vendedor || '-') +
@@ -2648,6 +2919,12 @@
           (p.numCp ? ' · ' + esc(p.numCp) : '') + '</div>' +
           '<div class="' + geoCls + '">' + geoTxt + '</div>' +
           (one ? '<a class="maps-link" href="' + one + '" target="_blank" rel="noopener">Abrir en Google Maps</a>' : '') +
+          (!tieneGps && p.direccion
+            ? ' <button type="button" class="btn btn-sm btn-outline btn-geocode" data-dir="' + esc(p.direccion) + '" data-cli="' + esc(p.cliente) + '">📍 Geocodificar</button>'
+            : '') +
+          (searchUrl && !tieneGps
+            ? ' <a class="maps-link" href="' + searchUrl + '" target="_blank" rel="noopener">Buscar en Google</a>'
+            : '') +
           '</div>';
       });
     });
@@ -2656,9 +2933,43 @@
       btn.addEventListener('click', function () {
         var cam = btn.getAttribute('data-maps-camion');
         var pts = (grupos[cam] || []).filter(function (p) {
-          return p.lat != null && p.lng != null;
+          return esGpsValido(p.lat, p.lng);
         });
         abrirPanelMaps(pts, cam);
+      });
+    });
+    box.querySelectorAll('.btn-geocode').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        var dir = btn.getAttribute('data-dir');
+        var cli = btn.getAttribute('data-cli');
+        btn.disabled = true;
+        btn.textContent = 'Buscando…';
+        var g = await geocodeDireccion(dir);
+        if (g && esGpsValido(g.lat, g.lng)) {
+          // actualizar todas las paradas del mismo cliente+dir
+          rutaParadas.forEach(function (p) {
+            if (String(p.cliente) === String(cli) && normTxt(p.direccion) === normTxt(dir)) {
+              p.lat = g.lat;
+              p.lng = g.lng;
+              p._geoSource = 'nominatim';
+            }
+          });
+          // Guardar en Supabase para la próxima vez
+          btn.textContent = 'Guardando…';
+          var saveRes = await guardarUbicacionCliente(cli, dir, g.lat, g.lng);
+          try {
+            localStorage.setItem('iem_ruta_reparto', JSON.stringify({ ts: Date.now(), paradas: rutaParadas }));
+          } catch (e) {}
+          renderRutaLista();
+          if (saveRes && !saveRes.ok && saveRes.reason && saveRes.reason !== 'sin-supabase') {
+            console.warn('[IEM] No se pudo persistir en Supabase:', saveRes.reason);
+            // No alertar al usuario: el GPS ya está en la sesión actual
+          }
+        } else {
+          btn.disabled = false;
+          btn.textContent = '📍 Geocodificar';
+          alert('No se encontró ubicación para:\n' + dir + '\n\nPrueba “Buscar en Google” y copia las coordenadas si las tienes.');
+        }
       });
     });
     try { actualizarMapaRuta(); } catch (eM) {}
@@ -2727,7 +3038,7 @@
             p.lng = g.lng;
             if (!p.nombre && g.nombreCat) p.nombre = g.nombreCat;
           });
-          var con = rutaParadas.filter(function (p) { return p.lat != null; }).length;
+          var con = rutaParadas.filter(function (p) { return esGpsValido(p.lat, p.lng); }).length;
           try {
             localStorage.setItem('iem_ruta_reparto', JSON.stringify({ ts: Date.now(), paradas: rutaParadas }));
           } catch (e2) {}
@@ -2931,8 +3242,7 @@
     var countsByTruck = Object.create(null);
 
     list.forEach(function (p) {
-      if (p.lat == null || p.lng == null) return;
-      if (!isFinite(Number(p.lat)) || !isFinite(Number(p.lng))) return;
+      if (!esGpsValido(p.lat, p.lng)) return;
       var k = Number(p.lat).toFixed(5) + ',' + Number(p.lng).toFixed(5) + '|' + String(p.cliente || '') + '|' + String(p.camion || '');
       if (seen[k]) return;
       seen[k] = true;
@@ -3201,12 +3511,12 @@
       var go = function () {
         var list = paradasFiltradas();
         var con = list.filter(function (p) {
-          return p.lat != null && p.lng != null && isFinite(Number(p.lat));
+          return esGpsValido(p.lat, p.lng);
         });
         if (!con.length) {
           var n = list.length;
           alert(n
-            ? ('Hay ' + n + ' paradas pero ninguna con GPS.\nImporta clientes con lat/long en Inventario o revisa códigos.')
+            ? ('Hay ' + n + ' paradas pero ninguna con GPS válido.\nUsa «Geocodificar» en cada tarjeta o importa clientes con lat/long en Inventario.')
             : 'No hay paradas. Sube el Excel de liquidación y espera a que termine de importar.');
           return;
         }
@@ -3217,6 +3527,26 @@
         capturarMiUbicacion().then(go);
       } else go();
     });
+    if ($('btnRutaGeocode')) {
+      $('btnRutaGeocode').addEventListener('click', function () {
+        var st = $('rutaGeoStatus');
+        var list = paradasFiltradas();
+        var faltan = list.filter(function (p) {
+          return p.direccion && String(p.direccion).trim().length >= 5 && !esGpsValido(p.lat, p.lng);
+        });
+        if (!faltan.length) {
+          alert('Todas las paradas del filtro actual ya tienen GPS válido (o no tienen dirección para buscar).');
+          return;
+        }
+        if (!confirm('Se buscarán coordenadas para ' + faltan.length + ' parada(s) sin GPS usando OpenStreetMap.\nPuede tardar ~' + Math.ceil(faltan.length * 1.2) + ' s.\n¿Continuar?')) return;
+        if (st) { st.hidden = false; st.textContent = 'Geocodificando…'; }
+        geocodeParadasFaltantes(list, function (i, total, msg) {
+          if (st) st.textContent = (i < total ? (i + '/' + total + ' · ') : '') + (msg || '');
+        }).then(function () {
+          if (st) setTimeout(function () { st.hidden = true; }, 4000);
+        });
+      });
+    }
     // Siempre menú principal al entrar; no saltar directo al módulo
     try { mostrarChooser(); } catch (eM0) {}
     try {
