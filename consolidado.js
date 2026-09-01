@@ -2718,12 +2718,19 @@
   function normalizeFechaStr(f) {
     var s = String(f == null ? '' : f).trim();
     if (!s) return '';
-    // ya ISO
+    // ya ISO (con o sin hora)
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-    // DD/MM/YYYY o D/M/YYYY
-    var m = s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    // DD/MM/YYYY o D/M/YYYY o DD-MM-YYYY
+    var m = s.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
     if (m) {
       return m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+    }
+    // DD/MM/YY (año 2 dígitos → 2000+)
+    m = s.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2})$/);
+    if (m) {
+      var yy = parseInt(m[3], 10);
+      var yyyy = yy < 50 ? 2000 + yy : 1900 + yy;
+      return yyyy + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
     }
     // Excel serial number (días desde 1899-12-30)
     var n = Number(s);
@@ -2824,14 +2831,24 @@
     var fechaSel = '';
     try { fechaSel = String(($('consFecha') || {}).value || '').trim(); } catch (e) {}
     var list = rutaParadas.slice();
-    if (fechaSel && /^\d{4}-\d{2}-\d{2}$/.test(fechaSel)) {
-      list = list.filter(function (p) {
-        var pf = normalizeFechaStr(p.fecha);
-        if (!pf || pf.length < 8) return true;
-        return pf === fechaSel;
-      });
+    if (!fechaSel || !/^\d{4}-\d{2}-\d{2}$/.test(fechaSel) || !list.length) {
+      return list;
     }
-    return list;
+    var filtradas = list.filter(function (p) {
+      var pf = normalizeFechaStr(p.fecha);
+      // Sin fecha en la fila → se incluye (Excel a veces no trae columna Fecha)
+      if (!pf || pf.length < 8) return true;
+      return pf === fechaSel;
+    });
+    // Si el filtro por día deja 0 paradas pero sí hay datos importados,
+    // no ocultar todo (fechas del Excel con formato distinto o de otro día).
+    // Mejor mostrar todas y que el usuario vea la lista.
+    if (!filtradas.length && list.length) {
+      console.warn('[IEM] Ninguna parada coincide con fecha', fechaSel,
+        '· ejemplos fecha Excel:', list.slice(0, 5).map(function (p) { return p.fecha; }));
+      return list;
+    }
+    return filtradas;
   }
 
   function paradasFiltradas() {
