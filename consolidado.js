@@ -2106,8 +2106,45 @@
   }
 
   /**
+   * Limpia dirección informal de liquidación para geocodificar mejor.
+   * Quita referencias de tienda, piso, "market X", etc.
+   */
+  function limpiarDireccionGeo(dir) {
+    var s = String(dir || '');
+    s = s
+      .replace(/\s*[-–—]\s*(market|mercado|tienda|bodega|puesto|ref\.?|frente|al lado).*$/i, '')
+      .replace(/\b(primer|2do|3er|segundo|tercero)\s*piso\b.*$/i, '')
+      .replace(/\b(int\.?|interior|dpto\.?|depto\.?|oficina)\s*\.?\s*\w+.*$/i, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    return s;
+  }
+
+  /** Variantes de consulta para Nominatim (de más específica a más corta). */
+  function variantesQueryGeo(direccion) {
+    var raw = String(direccion || '').trim();
+    var clean = limpiarDireccionGeo(raw);
+    var list = [];
+    function add(q) {
+      q = String(q || '').trim();
+      if (q.length < 5) return;
+      if (!/cusco|cuzco|peru|perú/i.test(q)) q = q + ', Cusco, Peru';
+      if (list.indexOf(q) < 0) list.push(q);
+    }
+    add(raw);
+    add(clean);
+    // Solo calle + número (primeros tokens útiles)
+    var m = clean.match(/^([A-Za-zÁÉÍÓÚÑáéíóúñ.\s]+?\s+\d{1,5}[A-Za-z]?)\b/);
+    if (m) add(m[1]);
+    // Sin número: solo nombre de vía + distrito si aparece
+    var via = clean.replace(/\bNRO\.?\s*\d+\b/gi, '').replace(/\b\d{1,5}[A-Za-z]?\b/g, '').replace(/\s{2,}/g, ' ').trim();
+    if (via.length >= 8) add(via);
+    return list.slice(0, 4);
+  }
+
+  /**
    * Geocodifica una dirección con Nominatim (OSM). Sin API key.
-   * Bias a Perú. Respeta rate-limit (~1 req/s). Cache en memoria.
+   * Prueba varias variantes + viewbox Cusco. Cache en memoria.
    */
   async function geocodeDireccion(direccion, opts) {
     opts = opts || {};
@@ -2116,42 +2153,52 @@
     var key = normTxt(q);
     if (_geoCache[key] !== undefined) return _geoCache[key];
 
-    // Añadir contexto Perú / Cusco si no lo tiene
-    var query = q;
-    if (!/peru|perú|cusco|cuzco|lima/i.test(query)) {
-      query = q + ', Cusco, Peru';
-    }
+    // Viewbox aprox. Cusco metropolitano (oeste,sur,este,norte)
+    var viewbox = '-72.05,-13.60,-71.85,-13.45';
+    var variantes = variantesQueryGeo(q);
 
     try {
-      var url = 'https://nominatim.openstreetmap.org/search?' +
-        'q=' + encodeURIComponent(query) +
-        '&format=json&limit=1&countrycodes=pe&addressdetails=0';
-      var res = await fetch(url, {
-        headers: {
-          'Accept': 'application/json',
-          // Nominatim pide User-Agent identificable
-          'User-Agent': 'IEM-ConsolidadoCarga/1.3 (reparto; contacto@local)'
+      for (var i = 0; i < variantes.length; i++) {
+        var query = variantes[i];
+        var url = 'https://nominatim.openstreetmap.org/search?' +
+          'q=' + encodeURIComponent(query) +
+          '&format=json&limit=3&countrycodes=pe&addressdetails=0' +
+          '&viewbox=' + viewbox + '&bounded=0';
+        var res = await fetch(url, {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'IEM-ConsolidadoCarga/1.3 (reparto; contacto@local)'
+          }
+        });
+        if (!res.ok) continue;
+        var data = await res.json();
+        if (!data || !data.length) {
+          // pequeña pausa entre intentos
+          if (i < variantes.length - 1) await new Promise(function (r) { setTimeout(r, 400); });
+          continue;
         }
-      });
-      if (!res.ok) {
-        _geoCache[key] = null;
-        return null;
-      }
-      var data = await res.json();
-      if (data && data[0] && data[0].lat && data[0].lon) {
-        var la = parseFloat(data[0].lat);
-        var lo = parseFloat(data[0].lon);
-        if (esGpsValido(la, lo)) {
-          var hit = { lat: la, lng: lo, source: 'nominatim', display: data[0].display_name || '' };
+        // Preferir resultado dentro de Cusco (lat ~ -13.4..-13.6, lng ~ -72.0..-71.9)
+        var best = null;
+        for (var j = 0; j < data.length; j++) {
+          var la = parseFloat(data[j].lat);
+          var lo = parseFloat(data[j].lon);
+          if (!esGpsValido(la, lo)) continue;
+          var enCusco = la > -13.65 && la < -13.40 && lo > -72.10 && lo < -71.80;
+          if (enCusco) { best = { lat: la, lng: lo, display: data[j].display_name || '' }; break; }
+          if (!best) best = { lat: la, lng: lo, display: data[j].display_name || '' };
+        }
+        if (best) {
+          var hit = { lat: best.lat, lng: best.lng, source: 'nominatim', display: best.display };
           _geoCache[key] = hit;
           return hit;
         }
+        if (i < variantes.length - 1) await new Promise(function (r) { setTimeout(r, 400); });
       }
       _geoCache[key] = null;
       return null;
     } catch (e) {
       console.warn('[IEM] geocode', e);
-      return null; // no cachear error de red para reintentar
+      return null;
     }
   }
 
