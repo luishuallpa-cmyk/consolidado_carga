@@ -2912,22 +2912,56 @@
           ? '<button type="button" class="btn btn-primary btn-sm maps-link" data-maps-camion="' + esc(g) + '">Maps / elegir parada</button>'
           : '<span class="geo-miss">Sin GPS</span>') +
         '</div>';
-      var arrOrden = ordenarPorCercania(arr);
-      // Si no hay GPS, conservar orden original
-      if (!arrOrden.length) arrOrden = arr.map(function (p) { return { raw: p, lat: p.lat, lng: p.lng, nombre: p.nombre, cliente: p.cliente, direccion: p.direccion }; });
+      // Primero las SIN GPS (para verlas al toque), luego el resto ordenado por cercanía
+      var sinGps = arr.filter(function (p) { return !esGpsValido(p.lat, p.lng); });
+      var conGps = arr.filter(function (p) { return esGpsValido(p.lat, p.lng); });
+      var arrOrden = ordenarPorCercania(conGps);
+      if (!arrOrden.length) {
+        arrOrden = conGps.map(function (p) {
+          return { raw: p, lat: p.lat, lng: p.lng, nombre: p.nombre, cliente: p.cliente, direccion: p.direccion };
+        });
+      }
+      // Prefijo: bloque destacado de faltantes
+      if (sinGps.length) {
+        html += '<div class="ruta-missing-box" style="margin:.5rem 0 .75rem;padding:.65rem .8rem;border:1px solid #f59e0b;border-radius:10px;background:rgba(245,158,11,.12)">' +
+          '<div style="font-weight:700;color:#fbbf24;margin-bottom:.4rem">⚠ ' + sinGps.length + ' sin GPS — completa lat,lng abajo</div>';
+        sinGps.forEach(function (p, idx) {
+          var searchUrl = p.direccion
+            ? ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(p.direccion + ', Cusco, Peru'))
+            : '';
+          html += '<div class="ruta-card ruta-card-missing" data-cliente="' + esc(p.cliente) + '" style="border-color:#f59e0b;margin-bottom:.45rem">' +
+            '<h4>⚠ ' + esc(p.nombre || p.cliente) + ' <span class="meta">(' + esc(p.cliente) + ')</span></h4>' +
+            '<div class="meta">' + esc(p.direccion || '—') + '</div>' +
+            '<div class="meta">Vend ' + esc(p.vendedor || '-') +
+            (p.placa ? ' · Placa ' + esc(p.placa) : '') +
+            (p.numCp ? ' · ' + esc(p.numCp) : '') + '</div>' +
+            '<div class="geo-miss">Sin GPS válido</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-top:.45rem">' +
+            (searchUrl ? '<a class="maps-link" href="' + searchUrl + '" target="_blank" rel="noopener">Buscar en Google</a>' : '') +
+            (p.direccion
+              ? '<button type="button" class="btn btn-sm btn-outline btn-geocode" data-dir="' + esc(p.direccion) + '" data-cli="' + esc(p.cliente) + '">📍 Auto</button>'
+              : '') +
+            '</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-top:.45rem">' +
+            '<input type="text" class="inp-manual-gps" data-cli="' + esc(p.cliente) + '" data-dir="' + esc(p.direccion || '') + '" ' +
+            'placeholder="-13.52, -71.97" style="flex:1;min-width:140px;padding:.4rem .55rem;border-radius:8px;border:1px solid var(--c-border);background:var(--c-bg);color:var(--c-text);font:inherit;font-size:.85rem" />' +
+            '<button type="button" class="btn btn-sm btn-primary btn-manual-gps" data-cli="' + esc(p.cliente) + '" data-dir="' + esc(p.direccion || '') + '">Guardar GPS</button>' +
+            '</div>' +
+            '<div class="meta" style="margin-top:.25rem;opacity:.8">Copia lat,lng de Google (clic derecho → ¿Qué hay aquí?)</div>' +
+            '</div>';
+        });
+        html += '</div>';
+      }
       arrOrden.forEach(function (po, idx) {
         var p = po.raw || po;
         var tieneGps = esGpsValido(p.lat, p.lng);
         var geoCls = tieneGps ? 'geo-ok' : 'geo-miss';
         var geoTxt = tieneGps
           ? ('📍 ' + Number(p.lat).toFixed(5) + ', ' + Number(p.lng).toFixed(5) +
-            (p._geoSource === 'nominatim' ? ' · OSM' : ''))
+            (p._geoSource === 'nominatim' ? ' · OSM' : '') +
+            (p._geoSource === 'manual' ? ' · manual' : ''))
           : '⚠ Sin GPS válido';
         var one = mapsLink(p.lat, p.lng);
-        // Link de búsqueda en Google Maps por dirección (útil cuando no hay GPS)
-        var searchUrl = p.direccion
-          ? ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(p.direccion + ', Cusco, Peru'))
-          : '';
         html += '<div class="ruta-card" data-cliente="' + esc(p.cliente) + '">' +
           '<h4>' + (idx + 1) + '. ' + esc(p.nombre || p.cliente) + ' <span class="meta">(' + esc(p.cliente) + ')</span></h4>' +
           '<div class="meta">' + esc(p.direccion || '—') + '</div>' +
@@ -2936,12 +2970,6 @@
           (p.numCp ? ' · ' + esc(p.numCp) : '') + '</div>' +
           '<div class="' + geoCls + '">' + geoTxt + '</div>' +
           (one ? '<a class="maps-link" href="' + one + '" target="_blank" rel="noopener">Abrir en Google Maps</a>' : '') +
-          (!tieneGps && p.direccion
-            ? ' <button type="button" class="btn btn-sm btn-outline btn-geocode" data-dir="' + esc(p.direccion) + '" data-cli="' + esc(p.cliente) + '">📍 Geocodificar</button>'
-            : '') +
-          (searchUrl && !tieneGps
-            ? ' <a class="maps-link" href="' + searchUrl + '" target="_blank" rel="noopener">Buscar en Google</a>'
-            : '') +
           '</div>';
       });
     });
@@ -2963,7 +2991,6 @@
         btn.textContent = 'Buscando…';
         var g = await geocodeDireccion(dir);
         if (g && esGpsValido(g.lat, g.lng)) {
-          // actualizar todas las paradas del mismo cliente+dir
           rutaParadas.forEach(function (p) {
             if (String(p.cliente) === String(cli) && normTxt(p.direccion) === normTxt(dir)) {
               p.lat = g.lat;
@@ -2971,25 +2998,60 @@
               p._geoSource = 'nominatim';
             }
           });
-          // Guardar en Supabase para la próxima vez
           btn.textContent = 'Guardando…';
-          var saveRes = await guardarUbicacionCliente(cli, dir, g.lat, g.lng);
+          await guardarUbicacionCliente(cli, dir, g.lat, g.lng);
           try {
             localStorage.setItem('iem_ruta_reparto', JSON.stringify({ ts: Date.now(), paradas: rutaParadas }));
           } catch (e) {}
           renderRutaLista();
-          if (saveRes && !saveRes.ok && saveRes.reason && saveRes.reason !== 'sin-supabase') {
-            console.warn('[IEM] No se pudo persistir en Supabase:', saveRes.reason);
-            // No alertar al usuario: el GPS ya está en la sesión actual
-          }
         } else {
           btn.disabled = false;
-          btn.textContent = '📍 Geocodificar';
-          alert('No se encontró ubicación para:\n' + dir + '\n\nPrueba “Buscar en Google” y copia las coordenadas si las tienes.');
+          btn.textContent = '📍 Auto';
+          alert('No se encontró automáticamente.\nUsa “Buscar en Google”, copia lat,lng y pégalas en el campo de abajo.');
         }
       });
     });
+    // Guardar GPS manual (pegar -13.52, -71.97)
+    box.querySelectorAll('.btn-manual-gps').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        var cli = btn.getAttribute('data-cli');
+        var dir = btn.getAttribute('data-dir') || '';
+        var inp = box.querySelector('.inp-manual-gps[data-cli="' + cssEscape(cli) + '"][data-dir="' + cssEscape(dir) + '"]') ||
+          btn.parentElement.querySelector('.inp-manual-gps');
+        var raw = inp ? String(inp.value || '').trim() : '';
+        var m = raw.match(/(-?\d+[.,]\d+)\s*[,;\s]\s*(-?\d+[.,]\d+)/);
+        if (!m) {
+          alert('Pega coordenadas como: -13.52364, -71.97196');
+          if (inp) inp.focus();
+          return;
+        }
+        var la = parseFloat(m[1].replace(',', '.'));
+        var lo = parseFloat(m[2].replace(',', '.'));
+        if (!esGpsValido(la, lo)) {
+          alert('Coordenadas no válidas para Cusco/Perú.');
+          return;
+        }
+        btn.disabled = true;
+        btn.textContent = 'Guardando…';
+        rutaParadas.forEach(function (p) {
+          if (String(p.cliente) === String(cli) && normTxt(p.direccion) === normTxt(dir)) {
+            p.lat = la;
+            p.lng = lo;
+            p._geoSource = 'manual';
+          }
+        });
+        await guardarUbicacionCliente(cli, dir, la, lo);
+        try {
+          localStorage.setItem('iem_ruta_reparto', JSON.stringify({ ts: Date.now(), paradas: rutaParadas }));
+        } catch (e) {}
+        renderRutaLista();
+      });
+    });
     try { actualizarMapaRuta(); } catch (eM) {}
+  }
+
+  function cssEscape(s) {
+    return String(s || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   }
 
   async function importarLiquidacion(file) {
