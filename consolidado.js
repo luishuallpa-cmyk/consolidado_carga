@@ -807,67 +807,75 @@
     var firstPage = true;
     var TITULO = 'CONSOLIDADO DE CARGA - MERCADERÍA - GENERAL (R)';
 
+    /**
+     * Cabecera estilo consolidado clásico:
+     * Logo + título + pastilla CAMIÓN + Fecha + badge Hoja
+     */
     function drawHeader(doc, camion, fecha, numHoja, totalHojas) {
       var y = marginTop;
       try {
         if (typeof LOGO_URL === 'string' && LOGO_URL) {
-          doc.addImage(LOGO_URL, 'PNG', marginX, y, 18, 12);
+          doc.addImage(LOGO_URL, 'PNG', marginX, y, 16, 11);
         }
       } catch (eL) {}
+
+      // Título
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10.5);
+      doc.setFontSize(9.5);
       doc.setTextColor(30, 58, 95);
-      doc.text(TITULO, marginX + 22, y + 5);
-      var badge = 'Hoja ' + numHoja + ' de ' + totalHojas;
-      doc.setFontSize(8);
-      var bw = doc.getTextWidth(badge) + 6;
-      doc.setFillColor(15, 23, 42);
-      doc.roundedRect(pageW - marginX - bw, y + 1, bw, 6, 1.5, 1.5, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.text(badge, pageW - marginX - bw + 3, y + 5);
+      doc.text(TITULO, marginX + 20, y + 4.5);
 
-      var camTxt = String(camion || '');
+      // Pastilla CAMIÓN (como diseño anterior)
+      var camTxt = String(camion || '').toUpperCase();
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
-      var camW = Math.max(doc.getTextWidth(camTxt) + 6, 20);
+      var camW = Math.max(doc.getTextWidth(camTxt) + 8, 22);
       doc.setFillColor(29, 78, 216);
-      doc.roundedRect(marginX + 22, y + 7.5, camW, 5.5, 1.5, 1.5, 'F');
+      doc.roundedRect(marginX + 20, y + 6.5, camW, 5.8, 2.5, 2.5, 'F');
       doc.setTextColor(255, 255, 255);
-      doc.text(camTxt, marginX + 25, y + 11.2);
+      doc.text(camTxt, marginX + 20 + camW / 2, y + 10.5, { align: 'center' });
 
+      // Fecha al lado del camión
       doc.setTextColor(51, 65, 85);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.text('Fecha: ' + String(fecha || ''), marginX + 22 + camW + 4, y + 11.2);
+      doc.setFontSize(8.5);
+      doc.text('Fecha: ' + String(fecha || ''), marginX + 20 + camW + 4, y + 10.5);
+
+      // Badge hoja (derecha)
+      var badge = 'Hoja ' + numHoja + ' de ' + totalHojas;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      var bw = doc.getTextWidth(badge) + 8;
+      doc.setFillColor(15, 23, 42);
+      doc.roundedRect(pageW - marginX - bw, y + 1, bw, 6.5, 3, 3, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.text(badge, pageW - marginX - bw / 2, y + 5.5, { align: 'center' });
 
       doc.setDrawColor(29, 78, 216);
-      doc.setLineWidth(0.6);
-      doc.line(marginX, y + 15, pageW - marginX, y + 15);
-      return y + 18;
+      doc.setLineWidth(0.55);
+      doc.line(marginX, y + 14, pageW - marginX, y + 14);
+      return y + 16.5;
     }
 
     /**
-     * Cuadro de control (1ª hoja de cada camión) — para rellenar a mano.
+     * Cartilla de datos (1ª hoja de cada camión) — compacta para no robar filas.
      * Devuelve Y inferior del bloque.
      */
     function drawVehicleForm(doc, camion, fecha) {
-      var y0 = marginTop + 17;
-      var boxH = 34;
+      var y0 = marginTop + 16;
+      var boxH = 28;
       var x = marginX;
       var w = contentW;
-      var rowH = 7.2;
+      var rowH = 5.8;
 
-      // Fondo y borde
       doc.setFillColor(248, 250, 252);
       doc.setDrawColor(30, 58, 95);
-      doc.setLineWidth(0.45);
-      doc.roundedRect(x, y0, w, boxH, 1.5, 1.5, 'FD');
-
-      // Barra lateral azul
+      doc.setLineWidth(0.4);
+      doc.roundedRect(x, y0, w, boxH, 1.2, 1.2, 'FD');
       doc.setFillColor(30, 58, 95);
-      doc.rect(x, y0, 3.2, boxH, 'F');
+      doc.rect(x, y0, 2.6, boxH, 'F');
 
-      // Parse fecha YYYY-MM-DD o similar
+      // Parse fecha
       var dia = '', mes = '', anio = '';
       var fs = String(fecha || '').trim();
       var m = fs.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
@@ -884,64 +892,61 @@
         }
       }
 
-      // --- Fila 1: CAMIÓN N° + cajas DIA MES AÑO ---
-      var y = y0 + 5.5;
+      var y = y0 + 4.8;
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
+      doc.setFontSize(7.5);
       doc.setTextColor(30, 58, 95);
-      doc.text('CAMIÓN N°:', x + 6, y);
+      doc.text('CAMIÓN N°:', x + 5, y);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
+      doc.setFontSize(8.5);
       doc.setTextColor(15, 23, 42);
       var camLabel = String(camion || '').replace(/^CAMION\s*/i, '').trim();
-      doc.text(camLabel || String(camion || ''), x + 28, y);
-      // línea de escritura
+      doc.text(camLabel || String(camion || ''), x + 26, y);
       doc.setDrawColor(148, 163, 184);
       doc.setLineWidth(0.25);
-      doc.line(x + 28, y + 1.2, x + w - 52, y + 1.2);
+      doc.line(x + 26, y + 1, x + w - 48, y + 1);
 
-      // Mini cajas fecha
-      var cellW = 12;
-      var cellH = 8;
-      var fx = x + w - 6 - cellW * 3 - 4;
-      var fy = y0 + 2.5;
+      // Mini cajas DÍA MES AÑO
+      var cellW = 11;
+      var cellH = 7;
+      var fx = x + w - 5 - cellW * 3 - 3;
+      var fy = y0 + 2;
       var labels = ['DÍA', 'MES', 'AÑO'];
       var vals = [dia, mes, anio];
       for (var i = 0; i < 3; i++) {
-        var cx = fx + i * (cellW + 2);
+        var cx = fx + i * (cellW + 1.5);
         doc.setDrawColor(30, 58, 95);
-        doc.setLineWidth(0.3);
+        doc.setLineWidth(0.25);
         doc.setFillColor(255, 255, 255);
         doc.rect(cx, fy, cellW, cellH, 'FD');
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(5.5);
+        doc.setFontSize(5);
         doc.setTextColor(100, 116, 139);
-        doc.text(labels[i], cx + cellW / 2, fy + 2.4, { align: 'center' });
+        doc.text(labels[i], cx + cellW / 2, fy + 2.2, { align: 'center' });
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
+        doc.setFontSize(7.5);
         doc.setTextColor(15, 23, 42);
-        if (vals[i]) doc.text(String(vals[i]), cx + cellW / 2, fy + 6.2, { align: 'center' });
+        if (vals[i]) doc.text(String(vals[i]), cx + cellW / 2, fy + 5.6, { align: 'center' });
       }
 
-      // --- Filas de campos ---
       var fields = [
         'PLACA DEL VEHÍCULO:',
         'TRANSPORTISTA / CONDUCTOR:',
         'PICKING — PREPARÓ (CARGA):'
       ];
       for (var fi = 0; fi < fields.length; fi++) {
-        y = y0 + 12 + fi * rowH;
+        y = y0 + 10 + fi * rowH;
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
+        doc.setFontSize(7);
         doc.setTextColor(30, 58, 95);
-        doc.text(fields[fi], x + 6, y);
-        var labelW = doc.getTextWidth(fields[fi]) + 2;
+        doc.text(fields[fi], x + 5, y);
+        var labelW = doc.getTextWidth(fields[fi]) + 1.5;
         doc.setDrawColor(148, 163, 184);
-        doc.setLineWidth(0.3);
-        doc.line(x + 6 + labelW, y + 0.8, x + w - 4, y + 0.8);
+        doc.setLineWidth(0.25);
+        doc.line(x + 5 + labelW, y + 0.7, x + w - 3, y + 0.7);
       }
 
-      return y0 + boxH + 3;
+      return y0 + boxH + 2.5;
     }
 
     function drawFooter(doc, camion, numHoja, totalHojas) {
@@ -981,7 +986,8 @@
         if (r.tipoKey !== lastTipo) {
           lastTipo = r.tipoKey;
           lastCat = '';
-          var nom = lastTipo === 'FRIOS' ? 'FRÍOS' : 'SECOS';
+          // Banner tipo (estilo consolidado clásico: FRÍOS / SECOS)
+          var nom = lastTipo === 'FRIOS' ? '❄  FRÍOS' : '📦  SECOS';
           var bg = lastTipo === 'FRIOS' ? [14, 116, 144] : [180, 83, 9];
           body.push([{
             content: nom,
@@ -992,12 +998,13 @@
               fontStyle: 'bold',
               fontSize: 9,
               halign: 'left',
-              cellPadding: 2.2
+              cellPadding: { top: 2.4, bottom: 2.4, left: 4, right: 4 }
             }
           }]);
         }
         if (r.categoria !== lastCat) {
           lastCat = r.categoria;
+          // Categoría (CARNICOS, MANTEQUILLAS…) barra oscura como diseño anterior
           body.push([{
             content: String(lastCat || 'OTROS'),
             colSpan: 7,
@@ -1007,7 +1014,7 @@
               fontStyle: 'bold',
               fontSize: 8,
               halign: 'left',
-              cellPadding: 1.8
+              cellPadding: { top: 1.8, bottom: 1.8, left: 4, right: 4 }
             }
           }]);
         }
@@ -1403,19 +1410,16 @@
     return (Math.round(n * 100) / 100).toFixed(2);
   }
 
-  /** Ítems por hoja (A4 con cabecera IEM + grupos). Más denso = menos páginas vacías. */
-  // Capacidad: fila=1, header categoría≈1, banner FRIOS/SECOS≈1
-  var UNIDADES_POR_HOJA = 32;
-  var ITEMS_POR_HOJA = 22; // cabecera + cuadro vehículo + pie
-
-  function pesoVisualFila(it, prevTipo, prevCat) {
-    var u = 1;
-    var tipo = String((it && it.tipo) || '').toUpperCase();
-    var cat = String((it && (it.categoria || it.linea)) || 'OTROS').toUpperCase();
-    if (tipo && tipo !== prevTipo) u += 2;
-    if (cat && cat !== prevCat) u += 2;
-    return u;
-  }
+  /**
+   * Capacidad por hoja (A4).
+   * - Primera hoja: lleva cuadro vehículo (~34 mm) → menos filas.
+   * - Hojas siguientes: solo cabecera → más filas.
+   * Unidades ≈ filas de producto + 1 por banner FRÍOS/SECOS + 1 por categoría.
+   */
+  var UNIDADES_PRIMERA_HOJA = 28;
+  var ITEMS_PRIMERA_HOJA = 20;
+  var UNIDADES_SIGUIENTE_HOJA = 38;
+  var ITEMS_SIGUIENTE_HOJA = 28;
 
   function ordenarItemsParaHojas(items) {
     var list = (items || []).map(function (it) {
@@ -1439,6 +1443,22 @@
     return list;
   }
 
+  /** Cuenta unidades visuales de un bloque de filas (para fusionar páginas). */
+  function unidadesDeFilas(rows) {
+    var units = 0;
+    var prevTipo = '';
+    var prevCat = '';
+    (rows || []).forEach(function (r) {
+      var need = 1;
+      if (r.tipoKey && r.tipoKey !== prevTipo) need += 1;
+      if (r.categoria && r.categoria !== prevCat) need += 1;
+      units += need;
+      prevTipo = r.tipoKey;
+      prevCat = r.categoria;
+    });
+    return units;
+  }
+
   function partirItemsEnPaginas(items) {
     var seq = ordenarItemsParaHojas(items);
     var pesoTotal = 0;
@@ -1451,19 +1471,31 @@
     var units = 0;
     var prevTipo = '';
     var prevCat = '';
+    var pageIdx = 0;
+
+    function limitesPagina(idx) {
+      if (idx === 0) {
+        return { maxU: UNIDADES_PRIMERA_HOJA, maxI: ITEMS_PRIMERA_HOJA };
+      }
+      return { maxU: UNIDADES_SIGUIENTE_HOJA, maxI: ITEMS_SIGUIENTE_HOJA };
+    }
+
     seq.forEach(function (r) {
       var tipo = r.tipoKey;
       var cat = r.categoria;
       var need = 1;
-      // headers compactos: solo +1 por cambio (antes +1/+2 dejaba huecos grandes)
       if (tipo && tipo !== prevTipo) need += 1;
       if (cat && cat !== prevCat) need += 1;
-      if (cur.length && (units + need > UNIDADES_POR_HOJA || cur.length >= ITEMS_POR_HOJA)) {
+
+      var lim = limitesPagina(pageIdx);
+      if (cur.length && (units + need > lim.maxU || cur.length >= lim.maxI)) {
         pages.push({ rows: cur, pesoTotalCamion: pesoTotal, esUltima: false });
         cur = [];
         units = 0;
         prevTipo = '';
         prevCat = '';
+        pageIdx++;
+        // Al empezar hoja nueva los banners de tipo/categoría vuelven a contar
         need = 1 + (tipo ? 1 : 0) + (cat ? 1 : 0);
       }
       cur.push(r);
@@ -1473,17 +1505,30 @@
     });
     if (cur.length) pages.push({ rows: cur, pesoTotalCamion: pesoTotal, esUltima: false });
     if (!pages.length) pages.push({ rows: [], pesoTotalCamion: pesoTotal, esUltima: true });
-    pages.forEach(function (pg, idx) { pg.esUltima = idx === pages.length - 1; });
-    // Fusionar última página corta (hasta 6 filas) con la anterior si cabe
-    if (pages.length >= 2) {
+
+    // Fusionar última hoja corta con la anterior si cabe (evita “media hoja vacía”)
+    var guard = 0;
+    while (pages.length >= 2 && guard < 5) {
+      guard++;
       var last = pages[pages.length - 1];
       var prev = pages[pages.length - 2];
-      if (last.rows.length <= 6 && prev.rows.length + last.rows.length <= ITEMS_POR_HOJA) {
-        prev.rows = prev.rows.concat(last.rows);
+      var prevIdx = pages.length - 2;
+      var limPrev = limitesPagina(prevIdx);
+      var mergedRows = prev.rows.concat(last.rows);
+      var mergedUnits = unidadesDeFilas(mergedRows);
+      // Última corta: ≤ 8 filas y cabe en límites de la hoja destino
+      if (last.rows.length <= 8 &&
+          mergedRows.length <= limPrev.maxI &&
+          mergedUnits <= limPrev.maxU) {
+        prev.rows = mergedRows;
         prev.esUltima = true;
         pages.pop();
+      } else {
+        break;
       }
     }
+
+    pages.forEach(function (pg, idx) { pg.esUltima = idx === pages.length - 1; });
     return pages;
   }
 
